@@ -251,7 +251,27 @@ class TimeProgressBar(BaseProgressBar):
 
 
 class ModelUsageBar(BaseProgressBar):
-    """Model usage progress bar showing Sonnet vs Opus distribution."""
+    """Model usage progress bar showing token distribution across model families."""
+
+    # Known families in display order; anything unmatched falls back to "Other"
+    # so no usage is ever silently dropped (issues #124, #164).
+    _FAMILY_STYLES: Final[dict[str, str]] = {
+        "Sonnet": "info",
+        "Opus": "warning",
+        "Haiku": "success",
+        "Other": "dim",
+    }
+
+    @staticmethod
+    def _family_for(model_name: str) -> str:
+        name = model_name.lower()
+        if "sonnet" in name:
+            return "Sonnet"
+        if "opus" in name:
+            return "Opus"
+        if "haiku" in name:
+            return "Haiku"
+        return "Other"
 
     def render(self, per_model_stats: dict[str, Any]) -> str:
         """Render model usage progress bar.
@@ -266,68 +286,34 @@ class ModelUsageBar(BaseProgressBar):
             empty_bar = self._render_bar(0, empty_style="table.border")
             return f"🤖 [{empty_bar}] No model data"
 
-        model_names = list(per_model_stats.keys())
-        if not model_names:
-            empty_bar = self._render_bar(0, empty_style="table.border")
-            return f"🤖 [{empty_bar}] Empty model stats"
-
-        sonnet_tokens = 0
-        opus_tokens = 0
-        other_tokens = 0
-
+        family_tokens: dict[str, int] = {}
         for model_name, stats in per_model_stats.items():
             model_tokens = stats.get("input_tokens", 0) + stats.get("output_tokens", 0)
+            family = self._family_for(model_name)
+            family_tokens[family] = family_tokens.get(family, 0) + model_tokens
 
-            if "sonnet" in model_name.lower():
-                sonnet_tokens += model_tokens
-            elif "opus" in model_name.lower():
-                opus_tokens += model_tokens
-            else:
-                other_tokens += model_tokens
-
-        total_tokens = sonnet_tokens + opus_tokens + other_tokens
-
+        total_tokens = sum(family_tokens.values())
         if total_tokens == 0:
             empty_bar = self._render_bar(0, empty_style="table.border")
             return f"🤖 [{empty_bar}] No tokens used"
 
-        sonnet_percentage = percentage(sonnet_tokens, total_tokens)
-        opus_percentage = percentage(opus_tokens, total_tokens)
-        other_percentage = percentage(other_tokens, total_tokens)
+        # Families with usage, in canonical display order.
+        families = [f for f in self._FAMILY_STYLES if family_tokens.get(f)]
 
-        sonnet_filled = int(self.width * sonnet_tokens / total_tokens)
-        opus_filled = int(self.width * opus_tokens / total_tokens)
+        # Largest-remainder apportionment so segments sum exactly to the bar width.
+        exact = {f: self.width * family_tokens[f] / total_tokens for f in families}
+        filled = {f: int(v) for f, v in exact.items()}
+        order = sorted(families, key=lambda f: exact[f] - filled[f], reverse=True)
+        for f in order[: self.width - sum(filled.values())]:
+            filled[f] += 1
 
-        total_filled = sonnet_filled + opus_filled
-        if total_filled < self.width:
-            if sonnet_tokens >= opus_tokens:
-                sonnet_filled += self.width - total_filled
-            else:
-                opus_filled += self.width - total_filled
-        elif total_filled > self.width:
-            if sonnet_tokens >= opus_tokens:
-                sonnet_filled -= total_filled - self.width
-            else:
-                opus_filled -= total_filled - self.width
+        segments = [
+            f"[{self._FAMILY_STYLES[f]}]{'█' * filled[f]}[/]"
+            for f in families
+            if filled[f] > 0
+        ]
+        summary = " | ".join(
+            f"{f} {percentage(family_tokens[f], total_tokens):.1f}%" for f in families
+        )
 
-        sonnet_bar = "█" * sonnet_filled
-        opus_bar = "█" * opus_filled
-
-        bar_segments = []
-        if sonnet_filled > 0:
-            bar_segments.append(f"[info]{sonnet_bar}[/]")
-        if opus_filled > 0:
-            bar_segments.append(f"[warning]{opus_bar}[/]")
-
-        bar_display = "".join(bar_segments)
-
-        if opus_tokens > 0 and sonnet_tokens > 0:
-            summary = f"Sonnet {sonnet_percentage:.1f}% | Opus {opus_percentage:.1f}%"
-        elif sonnet_tokens > 0:
-            summary = f"Sonnet {sonnet_percentage:.1f}%"
-        elif opus_tokens > 0:
-            summary = f"Opus {opus_percentage:.1f}%"
-        else:
-            summary = f"Other {other_percentage:.1f}%"
-
-        return f"🤖 [{bar_display}] {summary}"
+        return f"🤖 [{''.join(segments)}] {summary}"
