@@ -28,6 +28,7 @@ class LastUsedParams:
         """Save current settings as last used."""
         try:
             params = {
+                "plan": settings.plan,
                 "theme": settings.theme,
                 "timezone": settings.timezone,
                 "time_format": settings.time_format,
@@ -288,8 +289,6 @@ class Settings(BaseSettings):
                             cli_provided_fields.add(field_name)
 
             for key, value in last_params.items():
-                if key == "plan":
-                    continue
                 if not hasattr(settings, key):
                     continue
                 if key not in cli_provided_fields:
@@ -310,9 +309,7 @@ class Settings(BaseSettings):
         if settings.debug:
             settings.log_level = "DEBUG"
 
-        if settings.theme == "auto" or (
-            "theme" not in cli_provided_fields and not clear_config
-        ):
+        if settings.theme == "auto":
             from claude_monitor.terminal.themes import (
                 BackgroundDetector,
                 BackgroundType,

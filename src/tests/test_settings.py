@@ -67,8 +67,8 @@ class TestLastUsedParams:
         with open(self.last_used.params_file) as f:
             data = json.load(f)
 
-        # Verify plan is not saved (by design)
-        assert "plan" not in data
+        # Plan is persisted so it survives across runs (issue #162)
+        assert data["plan"] == "pro"
         assert data["theme"] == "dark"
         assert data["timezone"] == "UTC"
         assert data["time_format"] == "24h"
@@ -572,6 +572,68 @@ class TestSettings:
 
             assert settings.plan == "custom"
             assert settings.custom_limit_tokens is None  # Should be reset
+
+    @patch("claude_monitor.core.settings.Settings._get_system_timezone")
+    @patch("claude_monitor.core.settings.Settings._get_system_time_format")
+    def test_load_with_last_used_restores_saved_plan(
+        self, mock_time_format: Mock, mock_timezone: Mock
+    ) -> None:
+        """A saved plan is restored when --plan is not given (issue #162)."""
+        mock_timezone.return_value = "UTC"
+        mock_time_format.return_value = "24h"
+
+        with patch("claude_monitor.core.settings.LastUsedParams") as MockLastUsed:
+            mock_instance = Mock()
+            mock_instance.load.return_value = {"plan": "max5"}
+            MockLastUsed.return_value = mock_instance
+
+            settings = Settings.load_with_last_used([])
+
+            assert settings.plan == "max5"
+
+    @patch("claude_monitor.core.settings.Settings._get_system_timezone")
+    @patch("claude_monitor.core.settings.Settings._get_system_time_format")
+    def test_load_with_last_used_cli_plan_overrides_saved(
+        self, mock_time_format: Mock, mock_timezone: Mock
+    ) -> None:
+        """An explicit --plan overrides the saved plan (issue #162)."""
+        mock_timezone.return_value = "UTC"
+        mock_time_format.return_value = "24h"
+
+        with patch("claude_monitor.core.settings.LastUsedParams") as MockLastUsed:
+            mock_instance = Mock()
+            mock_instance.load.return_value = {"plan": "max5"}
+            MockLastUsed.return_value = mock_instance
+
+            settings = Settings.load_with_last_used(["--plan", "pro"])
+
+            assert settings.plan == "pro"
+
+    @patch("claude_monitor.core.settings.Settings._get_system_timezone")
+    @patch("claude_monitor.core.settings.Settings._get_system_time_format")
+    @patch("claude_monitor.terminal.themes.BackgroundDetector")
+    def test_load_with_last_used_saved_theme_survives_autodetect(
+        self, MockDetector: Mock, mock_time_format: Mock, mock_timezone: Mock
+    ) -> None:
+        """A saved explicit theme is not overwritten by auto-detect (issues #102, #200)."""
+        mock_timezone.return_value = "UTC"
+        mock_time_format.return_value = "24h"
+
+        from claude_monitor.terminal.themes import BackgroundType
+
+        mock_detector_instance = Mock()
+        mock_detector_instance.detect_background.return_value = BackgroundType.LIGHT
+        MockDetector.return_value = mock_detector_instance
+
+        with patch("claude_monitor.core.settings.LastUsedParams") as MockLastUsed:
+            mock_instance = Mock()
+            mock_instance.load.return_value = {"theme": "dark"}
+            MockLastUsed.return_value = mock_instance
+
+            settings = Settings.load_with_last_used([])
+
+            assert settings.theme == "dark"
+            mock_detector_instance.detect_background.assert_not_called()
 
     def test_to_namespace(self) -> None:
         """Test conversion to argparse.Namespace."""

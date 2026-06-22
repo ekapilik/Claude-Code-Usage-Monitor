@@ -254,7 +254,8 @@ claude-monitor --clear
 - ✅ CLI arguments always override saved settings
 - ✅ Atomic file operations prevent corruption
 - ✅ Graceful fallback if config files are damaged
-- ✅ Plan parameter never saved (must specify each time)
+- ✅ Plan is saved and restored between sessions (override any time with `--plan`)
+- ✅ An explicitly chosen theme is kept and not overwritten by auto-detection
 
 ### Basic Usage
 
