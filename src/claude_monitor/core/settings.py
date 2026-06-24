@@ -373,6 +373,11 @@ class Settings(BaseSettings):
             )
         return v
 
+    brief: bool = Field(
+        default=False,
+        description="Print minimal one-shot status and exit",
+    )
+
     @field_validator("plan", mode="before")
     @classmethod
     def validate_plan(cls, v: Any) -> str:
@@ -571,6 +576,7 @@ class Settings(BaseSettings):
         args.no_emoji = not self.emoji
         args.once = self.once
         args.compact = self.compact
+        args.brief = self.brief
         args.output = self.output
         args.write_state = self.write_state
         args.state_file = self.state_file

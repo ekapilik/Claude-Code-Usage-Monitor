@@ -54,6 +54,7 @@ class TestMain:
         mock_args.timezone = "UTC"
         mock_args.refresh_per_second = 1.0
         mock_args.refresh_rate = 10
+        mock_args.brief = False
 
         mock_settings = Mock()
         mock_settings.log_file = None

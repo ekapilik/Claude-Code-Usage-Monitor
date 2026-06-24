@@ -358,6 +358,13 @@ def main(argv: Optional[List[str]] = None) -> int:
         if settings.once:
             return _run_once(args)
 
+        if getattr(args, "brief", False):
+            data_paths = discover_claude_data_paths()
+            if not data_paths:
+                print("no active session")
+                return 1
+            return _run_brief(args, data_paths[0])
+
         _run_monitoring(args)
 
         return 0
@@ -691,6 +698,71 @@ def validate_cli_environment() -> Optional[str]:
             "Install a newer Python, e.g.: uv tool install claude-monitor --python 3.12"
         )
     return None
+
+
+def _run_brief(args: argparse.Namespace, data_path: Union[str, Path]) -> int:
+    """Fetch data once, print compact status, exit. No Rich, no loop."""
+    import shutil
+    from datetime import datetime, timezone as tz
+    from claude_monitor.core.plans import get_token_limit, get_cost_limit, Plans
+    from claude_monitor.core.calculations import calculate_hourly_burn_rate
+    from claude_monitor.ui.brief import format_brief
+    from claude_monitor.utils.time_utils import format_display_time, get_time_format_preference
+
+    data = analyze_usage(hours_back=192, quick_start=False, use_cache=False,
+                         data_path=str(data_path))
+
+    active = None
+    if data and "blocks" in data:
+        active = next((b for b in data["blocks"] if b.get("isActive")), None)
+
+    if not active:
+        print("no active session")
+        return 1
+
+    import pytz
+    from datetime import timedelta
+
+    tokens_used = active.get("totalTokens", 0)
+    session_cost = active.get("costUSD", 0.0)
+    sent_messages = active.get("sentMessagesCount", 0)
+
+    plan = getattr(args, "plan", "pro")
+    token_limit = get_token_limit(plan)
+    cost_limit = get_cost_limit(plan) or 100.0
+    messages_limit = Plans.get_message_limit(plan) or 1000
+
+    burn_rate_per_min = calculate_hourly_burn_rate(data["blocks"], datetime.now(tz.utc))
+
+    # Format reset time
+    try:
+        end_str = active.get("endTime") or active.get("startTime")
+        tz_handler_tz = pytz.timezone(args.timezone) if args.timezone not in ("auto", "local") else pytz.UTC
+        if end_str:
+            from claude_monitor.utils.time_utils import TimezoneHandler
+            handler = TimezoneHandler()
+            reset_dt = handler.parse_timestamp(end_str)
+            reset_local = reset_dt.astimezone(tz_handler_tz)
+            time_fmt = getattr(args, "time_format", "24h")
+            reset_time_str = reset_local.strftime("%H:%M" if time_fmt != "12h" else "%I:%M %p")
+        else:
+            reset_time_str = "?"
+    except Exception:
+        reset_time_str = "?"
+
+    width = shutil.get_terminal_size().columns
+    print(format_brief(
+        tokens_used=tokens_used,
+        token_limit=token_limit,
+        session_cost=session_cost,
+        cost_limit=cost_limit,
+        sent_messages=sent_messages,
+        messages_limit=messages_limit,
+        burn_rate_per_min=burn_rate_per_min,
+        reset_time_str=reset_time_str,
+        width=width,
+    ))
+    return 0
 
 
 def _run_table_view(
