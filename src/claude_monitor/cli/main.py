@@ -3,6 +3,7 @@
 import argparse
 import contextlib
 import logging
+import os
 import signal
 import sys
 import time
@@ -46,8 +47,19 @@ def get_standard_claude_paths() -> List[str]:
     return ["~/.claude/projects", "~/.config/claude/projects"]
 
 
+def _env_claude_paths() -> List[str]:
+    """Data paths derived from CLAUDE_CONFIG_DIR (comma-separated dirs allowed)."""
+    raw = os.environ.get("CLAUDE_CONFIG_DIR", "")
+    return [
+        str(Path(part.strip()) / "projects") for part in raw.split(",") if part.strip()
+    ]
+
+
 def discover_claude_data_paths(custom_paths: Optional[List[str]] = None) -> List[Path]:
     """Discover all available Claude data directories.
+
+    When no custom paths are given, CLAUDE_CONFIG_DIR (if set) is checked before the
+    standard locations, so a configured directory takes precedence.
 
     Args:
         custom_paths: Optional list of custom paths to check instead of standard ones
@@ -56,17 +68,34 @@ def discover_claude_data_paths(custom_paths: Optional[List[str]] = None) -> List
         List of Path objects for existing Claude data directories
     """
     paths_to_check: List[str] = (
-        [str(p) for p in custom_paths] if custom_paths else get_standard_claude_paths()
+        [str(p) for p in custom_paths]
+        if custom_paths
+        else _env_claude_paths() + get_standard_claude_paths()
     )
 
     discovered_paths: List[Path] = []
+    seen: set[Path] = set()
 
     for path_str in paths_to_check:
         path = Path(path_str).expanduser().resolve()
+        if path in seen:
+            continue
+        seen.add(path)
         if path.exists() and path.is_dir():
             discovered_paths.append(path)
 
     return discovered_paths
+
+
+def _no_data_diagnostic(searched_paths: List[str]) -> str:
+    """Build a clear 'no data' message that names where we looked (issue #110)."""
+    locations = "\n".join(f"  - {Path(p).expanduser()}" for p in searched_paths)
+    return (
+        "No Claude data directory found.\n\n"
+        f"Searched:\n{locations}\n\n"
+        "Make sure you have used Claude Code at least once so it has written "
+        "usage logs (JSONL), then run claude-monitor again."
+    )
 
 
 def main(argv: Optional[List[str]] = None) -> int:
@@ -77,6 +106,11 @@ def main(argv: Optional[List[str]] = None) -> int:
     if "--version" in argv or "-v" in argv:
         print(f"claude-monitor {__version__}")
         return 0
+
+    env_error = validate_cli_environment()
+    if env_error:
+        print(env_error, file=sys.stderr)
+        return 1
 
     try:
         settings = Settings.load_with_last_used(argv)
@@ -122,7 +156,9 @@ def _run_monitoring(args: argparse.Namespace) -> None:
     try:
         data_paths: List[Path] = discover_claude_data_paths()
         if not data_paths:
-            print_themed("No Claude data directory found", style="error")
+            print_themed(
+                _no_data_diagnostic(get_standard_claude_paths()), style="error"
+            )
             return
 
         data_path: Path = data_paths[0]
@@ -349,33 +385,18 @@ def handle_application_error(
 
 
 def validate_cli_environment() -> Optional[str]:
-    """Validate the CLI environment and return error message if invalid.
+    """Validate the runtime environment, returning an error message if unsupported.
 
     Returns:
-        Error message if validation fails, None if successful
+        A user-facing message if the environment is unsupported, otherwise None.
     """
-    try:
-        # Check Python version compatibility
-        if sys.version_info < (3, 8):
-            return f"Python 3.8+ required, found {sys.version_info.major}.{sys.version_info.minor}"
-
-        # Check for required dependencies
-        required_modules = ["rich", "pydantic", "watchdog"]
-        missing_modules: List[str] = []
-
-        for module in required_modules:
-            try:
-                __import__(module)
-            except ImportError:
-                missing_modules.append(module)
-
-        if missing_modules:
-            return f"Missing required modules: {', '.join(missing_modules)}"
-
-        return None
-
-    except Exception as e:
-        return f"Environment validation failed: {e}"
+    if sys.version_info < (3, 9):
+        return (
+            "Python 3.9+ is required, but you are running "
+            f"{sys.version_info[0]}.{sys.version_info[1]}. "
+            "Install a newer Python, e.g.: uv tool install claude-monitor --python 3.12"
+        )
+    return None
 
 
 def _run_table_view(

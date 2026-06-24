@@ -1,5 +1,7 @@
 """Simplified tests for CLI main module."""
 
+import os
+import tempfile
 from pathlib import Path
 from unittest.mock import Mock, patch
 
@@ -128,3 +130,89 @@ class TestFunctions:
             paths = discover_claude_data_paths(custom_paths)
             assert len(paths) == 1
             assert paths[0].name == "path"
+
+    def test_validate_cli_environment_requires_python_39(self) -> None:
+        """Python below 3.9 is rejected with a clear message (issue #172)."""
+        import importlib
+
+        cli_main = importlib.import_module("claude_monitor.cli.main")
+
+        with patch.object(cli_main.sys, "version_info", (3, 8, 0)):
+            message = cli_main.validate_cli_environment()
+
+        assert message is not None
+        assert "3.9" in message
+
+    def test_validate_cli_environment_accepts_supported_python(self) -> None:
+        """Python 3.9 passes the version check."""
+        import importlib
+
+        cli_main = importlib.import_module("claude_monitor.cli.main")
+
+        with patch.object(cli_main.sys, "version_info", (3, 9, 0)):
+            assert cli_main.validate_cli_environment() is None
+
+    @patch("claude_monitor.cli.main._run_monitoring")
+    @patch("claude_monitor.core.settings.Settings.load_with_last_used")
+    @patch(
+        "claude_monitor.cli.main.validate_cli_environment",
+        return_value="Python 3.9+ required, found 3.7",
+    )
+    def test_main_aborts_on_environment_error(
+        self, mock_validate: Mock, mock_load: Mock, mock_run: Mock
+    ) -> None:
+        """main() checks the environment first and aborts before doing any work (#172)."""
+        with patch("sys.stderr"):
+            result = main([])
+
+        mock_validate.assert_called_once()
+        assert result == 1
+        mock_load.assert_not_called()
+        mock_run.assert_not_called()
+
+    def test_no_data_diagnostic_names_searched_paths_and_hint(self) -> None:
+        """No-data message lists the (expanded) searched paths and gives guidance (#110)."""
+        from claude_monitor.cli.main import _no_data_diagnostic
+
+        message = _no_data_diagnostic(
+            ["~/.claude/projects", "~/.config/claude/projects"]
+        )
+
+        assert str(Path("~/.claude/projects").expanduser()) in message
+        assert str(Path("~/.config/claude/projects").expanduser()) in message
+        assert "Claude Code" in message
+
+    def test_env_claude_paths_handles_comma_separated(self) -> None:
+        """CLAUDE_CONFIG_DIR may list several dirs; each gets a 'projects' suffix (#116)."""
+        import importlib
+
+        cli_main = importlib.import_module("claude_monitor.cli.main")
+
+        with patch.dict("os.environ", {"CLAUDE_CONFIG_DIR": "/a, /b"}, clear=False):
+            paths = cli_main._env_claude_paths()
+
+        assert paths == [str(Path("/a") / "projects"), str(Path("/b") / "projects")]
+
+    def test_env_claude_paths_empty_when_unset(self) -> None:
+        """No CLAUDE_CONFIG_DIR -> no env-derived paths."""
+        import importlib
+
+        cli_main = importlib.import_module("claude_monitor.cli.main")
+
+        env = {k: v for k, v in os.environ.items() if k != "CLAUDE_CONFIG_DIR"}
+        with patch.dict("os.environ", env, clear=True):
+            assert cli_main._env_claude_paths() == []
+
+    def test_discover_includes_claude_config_dir(self) -> None:
+        """A CLAUDE_CONFIG_DIR/projects directory is discovered (#116)."""
+        import importlib
+
+        cli_main = importlib.import_module("claude_monitor.cli.main")
+
+        with tempfile.TemporaryDirectory() as tmp:
+            projects = Path(tmp) / "projects"
+            projects.mkdir()
+            with patch.dict("os.environ", {"CLAUDE_CONFIG_DIR": tmp}, clear=False):
+                paths = cli_main.discover_claude_data_paths()
+
+            assert projects.resolve() in paths
