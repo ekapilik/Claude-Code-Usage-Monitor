@@ -1,5 +1,15 @@
 # Changelog
 
+## [3.1.1] - Unreleased
+
+### Bug Fixes
+- **Model distribution shows all families**: `ModelUsageBar` now renders every model family — Sonnet, Opus, Haiku, and an "Other" bucket for anything else — instead of only Sonnet/Opus. Haiku and other models no longer vanish from the usage bar or skew the displayed percentages. (#124, #164)
+- **Plan is now saved and restored**: the selected `--plan` is persisted in `last_used.json` and reloaded on the next run; an explicit `--plan` on the command line still takes priority. (#162)
+- **Saved theme no longer overwritten**: an explicitly chosen `light`/`dark`/`classic` theme is preserved across runs instead of being silently replaced by background auto-detection. (#102, #200)
+- **Clear message on unsupported Python**: running on Python older than 3.9 now prints a clear "Python 3.9+ is required" message (with a `uv` install hint) instead of failing cryptically; the version check is now actually wired into startup and uses the documented 3.9 minimum. (#172)
+- **Helpful "no data" diagnostic**: when no Claude data directory is found, the monitor now lists the exact paths it searched and how to fix it, instead of a single terse line / blank screen. (#110)
+- **CLAUDE_CONFIG_DIR is honored**: when set, usage data under `$CLAUDE_CONFIG_DIR/projects` is discovered (comma-separated directories supported) and checked before the standard locations; path discovery also deduplicates repeated directories. (#116)
+
 ## [3.1.0] - 2025-07-23
 
 ### 🆕 New Features
