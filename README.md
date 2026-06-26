@@ -216,6 +216,7 @@ claude-monitor --help
 | --debug | flag | False | Enable debug logging |
 | --version, -v | flag | False | Show version information |
 | --clear | flag | False | Clear saved configuration |
+| --brief | flag | False | Print compact one-line status and exit (tmux-friendly) |
 
 #### Plan Options
 
@@ -350,6 +351,15 @@ claude-monitor --plan max20
 
 # Custom plan with explicit token limit
 claude-monitor --plan custom --custom-limit-tokens 100000
+```
+
+#### Compact Output for tmux / Scripts
+
+```bash
+# Print one-line status and exit — no Rich UI, no loop
+claude-monitor --brief
+# tok: 12k/44k (27%) | cost: $0.43/$50.00 (0%) | msgs: 45/250 (18%) | burn: 2.1k/hr | reset: 05:00 PM
+# Wraps at terminal width; exits 1 with "no active session" when idle
 ```
 
 #### Custom Reset Times
