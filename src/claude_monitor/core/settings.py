@@ -171,6 +171,10 @@ class Settings(BaseSettings):
 
     clear: bool = Field(default=False, description="Clear saved configuration")
 
+    hide_model_distribution: bool = Field(
+        default=False, description="Hide the model distribution bar"
+    )
+
     @field_validator("plan", mode="before")
     @classmethod
     def validate_plan(cls, v: Any) -> str:
@@ -347,5 +351,6 @@ class Settings(BaseSettings):
         args.log_level = self.log_level
         args.log_file = str(self.log_file) if self.log_file else None
         args.version = self.version
+        args.hide_model_distribution = self.hide_model_distribution
 
         return args

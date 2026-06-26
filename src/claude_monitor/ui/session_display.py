@@ -243,11 +243,8 @@ class SessionDisplayComponent:
             )
             screen_buffer.append("")
 
-            if per_model_stats:
-                model_bar = self.model_usage.render(per_model_stats)
-                screen_buffer.append(f"🤖 [value]Model Distribution:[/]   {model_bar}")
-            else:
-                model_bar = self.model_usage.render({})
+            if not kwargs.get("hide_model_distribution", False):
+                model_bar = self.model_usage.render(per_model_stats or {})
                 screen_buffer.append(f"🤖 [value]Model Distribution:[/]   {model_bar}")
             screen_buffer.append(f"[separator]{'─' * 60}[/]")
 
@@ -296,7 +293,7 @@ class SessionDisplayComponent:
                 f"📨 [value]Sent Messages:[/]  [info]{sent_messages}[/] [dim]messages[/]"
             )
 
-            if per_model_stats:
+            if per_model_stats and not kwargs.get("hide_model_distribution", False):
                 model_bar = self.model_usage.render(per_model_stats)
                 screen_buffer.append(f"🤖 [value]Model Usage:[/]    {model_bar}")
 

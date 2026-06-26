@@ -676,6 +676,15 @@ class TestSettings:
         assert namespace.reset_hour is None
         assert namespace.custom_limit_tokens is None
 
+    def test_hide_model_distribution_persisted_to_namespace(self) -> None:
+        """--hide-model-distribution defaults off and is carried into the namespace (#161)."""
+        assert Settings(_cli_parse_args=[]).hide_model_distribution is False
+
+        namespace = Settings(
+            hide_model_distribution=True, _cli_parse_args=[]
+        ).to_namespace()
+        assert namespace.hide_model_distribution is True
+
 
 class TestSettingsIntegration:
     """Integration tests for Settings class."""

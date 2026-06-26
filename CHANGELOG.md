@@ -10,6 +10,9 @@
 - **Helpful "no data" diagnostic**: when no Claude data directory is found, the monitor now lists the exact paths it searched and how to fix it, instead of a single terse line / blank screen. (#110)
 - **CLAUDE_CONFIG_DIR is honored**: when set, usage data under `$CLAUDE_CONFIG_DIR/projects` is discovered (comma-separated directories supported) and checked before the standard locations; path discovery also deduplicates repeated directories. (#116)
 
+### Features
+- **`--hide-model-distribution`**: new flag to hide the model distribution bar in the live view. (#161)
+
 ## [3.1.0] - 2025-07-23
 
 ### 🆕 New Features

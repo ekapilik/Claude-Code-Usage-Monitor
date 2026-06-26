@@ -268,6 +268,10 @@ class DisplayController:
             processed_data["cost_limit_p90"] = cost_limit_p90
             processed_data["messages_limit_p90"] = messages_limit_p90
 
+        processed_data["hide_model_distribution"] = getattr(
+            args, "hide_model_distribution", False
+        )
+
         try:
             screen_buffer = self.session_display.format_active_session_screen(
                 **processed_data
