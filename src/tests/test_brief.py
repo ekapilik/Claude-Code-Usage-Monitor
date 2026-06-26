@@ -1,7 +1,8 @@
 """Tests for --brief one-shot display mode."""
 
-import pytest
+from unittest.mock import patch
 
+from claude_monitor.cli.main import _run_brief
 from claude_monitor.ui.brief import format_brief
 
 
@@ -51,7 +52,9 @@ def test_no_block_split_mid_block():
     for line in out.splitlines():
         assert " | " not in line or all(
             block in line
-            for block in [s for s in ["tok:", "cost:", "msgs:", "burn:", "reset:"] if s in line]
+            for block in [
+                s for s in ["tok:", "cost:", "msgs:", "burn:", "reset:"] if s in line
+            ]
         )
 
 
@@ -86,3 +89,55 @@ def test_zero_limits_no_crash():
 def test_percentage_shown():
     out = _make_brief(tokens_used=11000, token_limit=44000)
     assert "25%" in out
+
+
+# --- CLI integration ---
+
+
+def _active_block():
+    return {
+        "isActive": True,
+        "totalTokens": 12000,
+        "costUSD": 0.43,
+        "sentMessagesCount": 45,
+        "perModelStats": {},
+        "entries": [],
+        "startTime": "2024-01-01T12:00:00Z",
+        "endTime": "2024-01-01T17:00:00Z",
+    }
+
+
+def test_run_brief_no_active_session_prints_message_and_exits_1(capsys):
+    fake_data = {"blocks": [{"isActive": False, "totalTokens": 0}]}
+    with patch("claude_monitor.cli.main.analyze_usage", return_value=fake_data):
+        import argparse
+
+        args = argparse.Namespace(
+            plan="pro",
+            timezone="UTC",
+            time_format="24h",
+            custom_limit_tokens=None,
+            brief=True,
+        )
+        rc = _run_brief(args, "/fake/path")
+    assert rc == 1
+    captured = capsys.readouterr()
+    assert "no active session" in captured.out
+
+
+def test_run_brief_with_active_session_prints_output_and_exits_0(capsys):
+    fake_data = {"blocks": [_active_block()]}
+    with patch("claude_monitor.cli.main.analyze_usage", return_value=fake_data):
+        import argparse
+
+        args = argparse.Namespace(
+            plan="pro",
+            timezone="UTC",
+            time_format="24h",
+            custom_limit_tokens=None,
+            brief=True,
+        )
+        rc = _run_brief(args, "/fake/path")
+    assert rc == 0
+    captured = capsys.readouterr()
+    assert "tok:" in captured.out
