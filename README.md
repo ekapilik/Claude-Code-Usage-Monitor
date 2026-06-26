@@ -216,7 +216,7 @@ claude-monitor --help
 | --debug | flag | False | Enable debug logging |
 | --version, -v | flag | False | Show version information |
 | --clear | flag | False | Clear saved configuration |
-| --brief | flag | False | Print compact one-line status and exit (tmux-friendly) |
+| --brief | flag | False | Print compact one-line status and exit |
 
 #### Plan Options
 
@@ -353,7 +353,7 @@ claude-monitor --plan max20
 claude-monitor --plan custom --custom-limit-tokens 100000
 ```
 
-#### Compact Output for tmux / Scripts
+#### Compact Output
 
 ```bash
 # Print one-line status and exit — no Rich UI, no loop
