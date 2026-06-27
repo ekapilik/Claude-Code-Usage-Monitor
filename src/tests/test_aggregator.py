@@ -647,6 +647,17 @@ class TestResetHourBucketing:
         days = {row["date"] for row in result}
         assert days == {"2024-01-01", "2024-01-02"}
 
+    def test_reset_hour_uses_display_timezone(self) -> None:
+        """The rollover hour is applied in the configured timezone, not raw UTC."""
+        aggregator = UsageAggregator(
+            data_path="/x", timezone="America/New_York", reset_hour=4
+        )
+        # 06:00 UTC == 02:00 EDT, before the 04:00 local rollover -> previous day.
+        result = aggregator.aggregate_daily(
+            [self._entry(datetime(2024, 6, 27, 6, 0, tzinfo=timezone.utc))]
+        )
+        assert [row["date"] for row in result] == ["2024-06-26"]
+
     def test_no_reset_hour_keeps_calendar_day(self) -> None:
         """Without reset-hour the bucket is the plain calendar day (no regression)."""
         aggregator = UsageAggregator(data_path="/x")

@@ -76,6 +76,9 @@ class MonitoringOrchestrator:
             args: Command line arguments
         """
         self._args = args
+        # Propagate the model filter so non-Anthropic entries are excluded from
+        # the live data the same way as one-shot (#113).
+        self.data_manager.filter_models = getattr(args, "filter_models", "all")
 
     def register_update_callback(
         self, callback: Callable[[Dict[str, Any]], None]

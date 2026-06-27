@@ -485,6 +485,7 @@ def _get_initial_token_limit(
                 quick_start=False,
                 use_cache=False,
                 data_path=str(data_path),
+                filter_models=getattr(args, "filter_models", "all"),
             )
 
             if usage_data and "blocks" in usage_data:
@@ -573,6 +574,7 @@ def _run_table_view(
             aggregation_mode=view_mode,
             timezone=args.timezone,
             reset_hour=getattr(args, "reset_hour", None),
+            filter_models=getattr(args, "filter_models", "all"),
         )
 
         # Create table controller

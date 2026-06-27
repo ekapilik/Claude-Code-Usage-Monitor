@@ -750,7 +750,9 @@ class TestSettings:
         assert default.once is False
         assert default.output == "rich"
 
-        namespace = Settings(once=True, output="json", _cli_parse_args=[]).to_namespace()
+        namespace = Settings(
+            once=True, output="json", _cli_parse_args=[]
+        ).to_namespace()
         assert namespace.once is True
         assert namespace.output == "json"
 
@@ -778,6 +780,19 @@ class TestSettings:
         """--compact defaults off and reaches the namespace (#65)."""
         assert Settings(_cli_parse_args=[]).compact is False
         assert Settings(compact=True, _cli_parse_args=[]).to_namespace().compact is True
+
+    def test_filter_models_default_and_namespace(self) -> None:
+        """--filter-models defaults to 'all' and reaches the namespace (#113)."""
+        assert Settings(_cli_parse_args=[]).filter_models == "all"
+        ns = Settings(filter_models="ANTHROPIC", _cli_parse_args=[]).to_namespace()
+        assert ns.filter_models == "anthropic"  # validated + lowercased
+
+    def test_filter_models_rejects_invalid(self) -> None:
+        import pytest
+        from pydantic import ValidationError
+
+        with pytest.raises(ValidationError):
+            Settings(filter_models="openai", _cli_parse_args=[])
 
 
 class TestSettingsIntegration:

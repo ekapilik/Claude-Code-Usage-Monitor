@@ -98,6 +98,7 @@ class UsageAggregator:
         aggregation_mode: str = "daily",
         timezone: str = "UTC",
         reset_hour: Optional[int] = None,
+        filter_models: str = "all",
     ):
         """Initialize the aggregator.
 
@@ -114,6 +115,7 @@ class UsageAggregator:
         self.aggregation_mode = aggregation_mode
         self.timezone = timezone
         self.reset_hour = reset_hour
+        self.filter_models = filter_models
         self.timezone_handler = TimezoneHandler()
 
     def _aggregate_by_period(
@@ -180,9 +182,25 @@ class UsageAggregator:
             List of daily aggregated data
         """
         shift = timedelta(hours=self.reset_hour or 0)
+
+        def _day_key(timestamp: datetime) -> str:
+            ts = timestamp
+            # reset_hour is a local-time concept: bucket against the display
+            # timezone, not the raw UTC timestamp, so the rollover lands at the
+            # intended local hour. Only when reset_hour is set, to avoid changing
+            # the default UTC daily bucketing.
+            if self.reset_hour is not None and self.timezone not in (None, "", "auto"):
+                try:
+                    ts = self.timezone_handler.convert_to_timezone(
+                        timestamp, self.timezone
+                    )
+                except Exception:
+                    ts = timestamp
+            return (ts - shift).strftime("%Y-%m-%d")
+
         return self._aggregate_by_period(
             entries,
-            lambda timestamp: (timestamp - shift).strftime("%Y-%m-%d"),
+            _day_key,
             "date",
             start_date,
             end_date,
@@ -287,7 +305,9 @@ class UsageAggregator:
         logger.info(f"Starting aggregation in {self.aggregation_mode} mode")
 
         # Load usage entries
-        entries, _ = load_usage_entries(data_path=self.data_path)
+        entries, _ = load_usage_entries(
+            data_path=self.data_path, filter_models=self.filter_models
+        )
 
         if not entries:
             logger.warning("No usage entries found")

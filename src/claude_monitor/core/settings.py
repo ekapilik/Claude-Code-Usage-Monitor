@@ -194,6 +194,12 @@ class Settings(BaseSettings):
         "stdin, capture official rate_limits, and print a one-line status",
     )
 
+    filter_models: Literal["all", "anthropic"] = Field(
+        default="all",
+        description="Which models to count: 'all' (default) or 'anthropic' to "
+        "exclude non-Claude models (e.g. routed via Claude Code Router)",
+    )
+
     compact: bool = Field(
         default=False,
         description="Single-line compact output (works live and one-shot)",
@@ -226,6 +232,20 @@ class Settings(BaseSettings):
                 return v_lower
             raise ValueError(
                 f"Invalid output: {v}. Must be one of: {', '.join(valid_outputs)}"
+            )
+        return v
+
+    @field_validator("filter_models", mode="before")
+    @classmethod
+    def validate_filter_models(cls, v: Any) -> str:
+        """Validate and normalize the model filter value."""
+        if isinstance(v, str):
+            v_lower = v.lower()
+            valid = ["all", "anthropic"]
+            if v_lower in valid:
+                return v_lower
+            raise ValueError(
+                f"Invalid filter-models: {v}. Must be one of: {', '.join(valid)}"
             )
         return v
 
@@ -422,5 +442,6 @@ class Settings(BaseSettings):
         args.output = self.output
         args.write_state = self.write_state
         args.state_file = self.state_file
+        args.filter_models = self.filter_models
 
         return args

@@ -16,7 +16,7 @@ from claude_monitor.core.data_processors import (
     TimestampProcessor,
     TokenExtractor,
 )
-from claude_monitor.core.models import CostMode, UsageEntry
+from claude_monitor.core.models import CostMode, UsageEntry, is_anthropic_model
 from claude_monitor.core.pricing import PricingCalculator
 from claude_monitor.error_handling import report_file_error
 from claude_monitor.utils.time_utils import TimezoneHandler
@@ -34,6 +34,7 @@ def load_usage_entries(
     hours_back: Optional[int] = None,
     mode: CostMode = CostMode.AUTO,
     include_raw: bool = False,
+    filter_models: str = "all",
 ) -> Tuple[List[UsageEntry], Optional[List[Dict[str, Any]]]]:
     """Load and convert JSONL files to UsageEntry objects.
 
@@ -42,6 +43,10 @@ def load_usage_entries(
         hours_back: Only include entries from last N hours
         mode: Cost calculation mode
         include_raw: Whether to return raw JSON data alongside entries
+        filter_models: ``"anthropic"`` drops entries for non-Anthropic models
+            (e.g. routed via Claude Code Router) so they do not count toward the
+            Claude limit/cost; ``"all"`` (default) keeps everything. Raw entries
+            are never filtered (limit detection is model-agnostic).
 
     Returns:
         Tuple of (usage_entries, raw_data) where raw_data is None unless include_raw=True
@@ -76,6 +81,13 @@ def load_usage_entries(
         all_entries.extend(entries)
         if include_raw and raw_data:
             raw_entries.extend(raw_data)
+
+    if filter_models == "anthropic":
+        before = len(all_entries)
+        all_entries = [e for e in all_entries if is_anthropic_model(e.model)]
+        dropped = before - len(all_entries)
+        if dropped:
+            logger.info(f"Filtered out {dropped} non-Anthropic entries")
 
     all_entries.sort(key=lambda e: e.timestamp)
 

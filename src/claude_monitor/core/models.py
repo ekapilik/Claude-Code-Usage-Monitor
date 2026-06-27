@@ -162,3 +162,23 @@ def normalize_model_name(model: str) -> str:
         return "claude-3-haiku"
 
     return model
+
+
+def is_anthropic_model(model: str) -> bool:
+    """Whether ``model`` is recognizably Anthropic/Claude (or the Claude-internal
+    ``<synthetic>`` marker).
+
+    Used by ``--filter-models anthropic`` to drop foreign models routed through
+    Claude Code Router (e.g. GPT, DeepSeek, Gemini) so they do not count toward
+    the Claude limit or cost. Matches on ``claude`` / ``anthropic`` only: every
+    real Claude model id carries one of those (direct, Bedrock ``anthropic.``,
+    or Vertex ``claude-`` forms), and matching bare family words like ``opus``
+    would wrongly admit foreign names such as ``gpt-4-opus``. Empty/unknown names
+    are treated as non-Anthropic.
+    """
+    if not model:
+        return False
+    name = model.lower()
+    if name == "<synthetic>":
+        return True
+    return "claude" in name or "anthropic" in name

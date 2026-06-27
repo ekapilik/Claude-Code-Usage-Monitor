@@ -20,6 +20,7 @@ def analyze_usage(
     use_cache: bool = True,
     quick_start: bool = False,
     data_path: Optional[str] = None,
+    filter_models: str = "all",
 ) -> Dict[str, Any]:
     """
     Main entry point to generate response_final.json.
@@ -56,6 +57,7 @@ def analyze_usage(
         hours_back=hours_back,
         mode=CostMode.AUTO,
         include_raw=True,
+        filter_models=filter_models,
     )
     load_time = (datetime.now() - start_time).total_seconds()
     logger.info(f"Data loaded in {load_time:.3f}s")
