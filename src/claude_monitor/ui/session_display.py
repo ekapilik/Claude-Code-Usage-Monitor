@@ -216,8 +216,8 @@ class SessionDisplayComponent:
             header_manager = HeaderManager()
             screen_buffer.extend(header_manager.create_header(plan, timezone))
 
-        if plan in ["custom", "pro", "max5", "max20"]:
-            from claude_monitor.core.plans import DEFAULT_COST_LIMIT
+        if plan in ["custom", "pro", "max5", "max20", "team"]:
+            from claude_monitor.core.plans import DEFAULT_COST_LIMIT, Plans
 
             cost_limit_p90 = kwargs.get("cost_limit_p90", DEFAULT_COST_LIMIT)
             messages_limit_p90 = kwargs.get("messages_limit_p90", 1500)
@@ -231,6 +231,10 @@ class SessionDisplayComponent:
                 screen_buffer.append(self._separator_line())
             else:
                 screen_buffer.append("")
+                plan_info = Plans.get_plan_info(plan)
+                if plan_info["unverified"] and plan_info["guidance"]:
+                    screen_buffer.append(f"[warning]{plan_info['guidance']}[/]")
+                    screen_buffer.append(self._separator_line())
 
             cost_percentage = (
                 min(100, percentage(session_cost, cost_limit_p90))

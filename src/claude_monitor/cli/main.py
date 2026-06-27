@@ -36,6 +36,7 @@ from claude_monitor.output import (
     format_terminal_title,
     format_text,
 )
+from claude_monitor.output.api_usage import read_api_limits
 from claude_monitor.output.official import (
     capture_statusline,
     format_statusline,
@@ -163,6 +164,34 @@ def _maybe_set_terminal_title(args: argparse.Namespace, snapshot: dict) -> None:
     set_terminal_title(format_terminal_title(snapshot, template))
 
 
+def _has_fresh_limit_percentage(limits: Optional[dict]) -> bool:
+    if not limits or limits.get("stale"):
+        return False
+    for key in ("five_hour", "seven_day"):
+        window = limits.get(key)
+        if isinstance(window, dict) and window.get("used_percentage") is not None:
+            return True
+    return False
+
+
+def _read_optional_api_limits(
+    args: argparse.Namespace, official: Optional[dict], now_epoch: int
+) -> Optional[dict]:
+    if not getattr(args, "api", False):
+        return None
+    if _has_fresh_limit_percentage(official):
+        return None
+
+    cache_file = getattr(args, "api_cache_file", None)
+    ttl_seconds = getattr(args, "api_ttl_seconds", 180)
+    return read_api_limits(
+        enabled=True,
+        cache_path=Path(cache_file) if cache_file else None,
+        now_epoch=now_epoch,
+        ttl_seconds=ttl_seconds,
+    )
+
+
 def _effective_token_limit(args: argparse.Namespace, base_limit: int) -> int:
     """Resolve the token limit to display.
 
@@ -218,8 +247,12 @@ def _run_once(args: argparse.Namespace) -> int:
         args, monitoring_data.get("token_limit") or get_token_limit(args.plan, blocks)
     )
 
-    official = read_official_limits(now_epoch=int(time.time()))
-    snapshot = build_snapshot(data, args, token_limit, official=official)
+    now_epoch = int(time.time())
+    official = read_official_limits(now_epoch=now_epoch)
+    api_limits = _read_optional_api_limits(args, official, now_epoch)
+    snapshot = build_snapshot(
+        data, args, token_limit, official=official, api_limits=api_limits
+    )
     _maybe_set_terminal_title(args, snapshot)
     output = getattr(args, "output", "rich")
     if output == "json":
@@ -467,9 +500,17 @@ def _run_monitoring(args: argparse.Namespace) -> None:
                         or getattr(args, "write_state", False)
                         or getattr(args, "set_terminal_title", False)
                     ):
-                        official = read_official_limits(now_epoch=int(time.time()))
+                        now_epoch = int(time.time())
+                        official = read_official_limits(now_epoch=now_epoch)
+                        api_limits = _read_optional_api_limits(
+                            args, official, now_epoch
+                        )
                         snapshot = build_snapshot(
-                            data, args, token_limit_now, official=official
+                            data,
+                            args,
+                            token_limit_now,
+                            official=official,
+                            api_limits=api_limits,
                         )
 
                     if snapshot is not None:

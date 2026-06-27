@@ -103,9 +103,9 @@ class Settings(BaseSettings):
         cli_implicit_flags=True,
     )
 
-    plan: Literal["pro", "max5", "max20", "custom"] = Field(
+    plan: Literal["pro", "max5", "max20", "team", "custom"] = Field(
         default="custom",
-        description="Plan type (pro, max5, max20, custom)",
+        description="Plan type (pro, max5, max20, team, custom)",
     )
 
     view: Literal[
@@ -226,6 +226,25 @@ class Settings(BaseSettings):
         default=None,
         description="State file path for --write-state "
         "(default ~/.claude-monitor/state/latest.json)",
+    )
+
+    api: bool = Field(
+        default=False,
+        description="Enable the experimental Anthropic OAuth usage API",
+    )
+
+    api_cache_file: Optional[str] = Field(
+        default=None,
+        description=(
+            "Experimental API cache file path "
+            "(default ~/.claude-monitor/api/latest.json)"
+        ),
+    )
+
+    api_ttl_seconds: int = Field(
+        default=180,
+        ge=1,
+        description="Freshness TTL for the experimental API cache in seconds",
     )
 
     data_paths: List[str] = Field(
@@ -360,7 +379,7 @@ class Settings(BaseSettings):
         """Validate and normalize plan value."""
         if isinstance(v, str):
             v_lower = v.lower()
-            valid_plans = ["pro", "max5", "max20", "custom"]
+            valid_plans = ["pro", "max5", "max20", "team", "custom"]
             if v_lower in valid_plans:
                 return v_lower
             raise ValueError(
@@ -555,6 +574,9 @@ class Settings(BaseSettings):
         args.output = self.output
         args.write_state = self.write_state
         args.state_file = self.state_file
+        args.api = self.api
+        args.api_cache_file = self.api_cache_file
+        args.api_ttl_seconds = self.api_ttl_seconds
         args.data_paths = list(self.data_paths)
         args.warehouse = self.warehouse
         args.warehouse_file = self.warehouse_file

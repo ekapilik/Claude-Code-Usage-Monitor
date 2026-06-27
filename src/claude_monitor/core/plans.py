@@ -15,6 +15,7 @@ class PlanType(Enum):
     PRO = "pro"
     MAX5 = "max5"
     MAX20 = "max20"
+    TEAM = "team"
     CUSTOM = "custom"
 
     @classmethod
@@ -35,6 +36,9 @@ class PlanConfig:
     cost_limit: float
     message_limit: int
     display_name: str
+    confidence: str = "local_estimate"
+    unverified: bool = False
+    guidance: Optional[str] = None
 
     @property
     def formatted_token_limit(self) -> str:
@@ -62,6 +66,17 @@ PLAN_LIMITS: Dict[PlanType, Dict[str, Any]] = {
         "cost_limit": 140.0,
         "message_limit": 2_000,
         "display_name": "Max20",
+    },
+    PlanType.TEAM: {
+        "token_limit": 19_000,
+        "cost_limit": 18.0,
+        "message_limit": 250,
+        "display_name": "Team (estimated)",
+        "unverified": True,
+        "guidance": (
+            "Team limits are unverified estimates; prefer the official statusline "
+            "source or --plan custom."
+        ),
     },
     PlanType.CUSTOM: {
         "token_limit": 44_000,
@@ -97,6 +112,9 @@ class Plans:
             cost_limit=data["cost_limit"],
             message_limit=data["message_limit"],
             display_name=data["display_name"],
+            confidence=data.get("confidence", "local_estimate"),
+            unverified=bool(data.get("unverified", False)),
+            guidance=data.get("guidance"),
         )
 
     @classmethod
@@ -157,6 +175,26 @@ class Plans:
     def is_valid_plan(cls, plan: str) -> bool:
         """Check whether a given plan name is recognized."""
         return cls.get_plan_by_name(plan) is not None
+
+    @classmethod
+    def get_plan_info(cls, plan: str) -> Dict[str, Any]:
+        """Return source/confidence metadata for a plan label."""
+        cfg = cls.get_plan_by_name(plan)
+        if cfg is None:
+            return {
+                "name": plan,
+                "display_name": str(plan),
+                "confidence": "unknown",
+                "unverified": True,
+                "guidance": "Unknown plan; use --plan custom for explicit limits.",
+            }
+        return {
+            "name": cfg.name,
+            "display_name": cfg.display_name,
+            "confidence": cfg.confidence,
+            "unverified": cfg.unverified,
+            "guidance": cfg.guidance,
+        }
 
 
 TOKEN_LIMITS: Dict[str, int] = {

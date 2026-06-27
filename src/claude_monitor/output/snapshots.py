@@ -5,7 +5,9 @@ numbers are estimates (``confidence="local_estimate"``). When the caller passes
 official statusline ``rate_limits`` (see ``official.py``), the ``limits`` block —
 shaped exactly like ``rate_limits.{five_hour,seven_day}`` — flips to
 ``confidence="official"`` for that window and the five-hour value drives the exit
-status. No I/O and no network — the same builder ``--write-state`` (#184) reuses.
+status. Opt-in experimental API limits may fill the same windows only when fresh
+official limits are unavailable. No I/O and no network — the same builder
+``--write-state`` (#184) reuses.
 """
 
 from __future__ import annotations
@@ -20,8 +22,10 @@ SNAPSHOT_SCHEMA_VERSION = "1.0"
 
 _KIND = "claude_code_jsonl"
 _STATUSLINE = "statusline"
+_API = "anthropic_oauth_usage_api"
 _LOCAL = "local_estimate"
 _OFFICIAL = "official"
+_EXPERIMENTAL = "experimental"
 _UNKNOWN = "unknown"
 _PACE_TOLERANCE_POINTS = 10.0
 _FIVE_HOUR_SECONDS = 5 * 60 * 60
@@ -35,12 +39,10 @@ def _coerce_now(now: Optional[datetime]) -> datetime:
     return now.astimezone(timezone.utc)
 
 
-def _official_block(window: Dict[str, Any]) -> Dict[str, Any]:
-    """A ``limits.*`` block sourced from the official statusline ``rate_limits``.
-
-    Official data reports a ``used_percentage`` and ``resets_at`` only — token
-    counts stay ``None`` here (local token detail lives in the ``local`` section).
-    """
+def _external_block(
+    window: Dict[str, Any], source_kind: str, confidence: str
+) -> Dict[str, Any]:
+    """A ``limits.*`` block sourced outside the local JSONL estimate."""
     epoch = window.get("resets_at_epoch")
     resets_at = (
         datetime.fromtimestamp(epoch, timezone.utc).isoformat()
@@ -53,9 +55,19 @@ def _official_block(window: Dict[str, Any]) -> Dict[str, Any]:
         "token_limit": None,
         "resets_at": resets_at,
         "resets_at_epoch": epoch,
-        "source": {"kind": _STATUSLINE},
-        "confidence": _OFFICIAL,
+        "source": {"kind": source_kind},
+        "confidence": confidence,
     }
+
+
+def _official_block(window: Dict[str, Any]) -> Dict[str, Any]:
+    """A ``limits.*`` block sourced from the official statusline ``rate_limits``."""
+    return _external_block(window, _STATUSLINE, _OFFICIAL)
+
+
+def _api_block(window: Dict[str, Any]) -> Dict[str, Any]:
+    """A ``limits.*`` block sourced from the experimental OAuth usage API."""
+    return _external_block(window, _API, _EXPERIMENTAL)
 
 
 def _family_of(model: str) -> str:
@@ -200,6 +212,7 @@ def build_snapshot(
     args: Any,
     token_limit: int,
     official: Optional[dict] = None,
+    api_limits: Optional[dict] = None,
     now: Optional[datetime] = None,
 ) -> dict:
     """Build the one-shot snapshot dict from a single analysis payload.
@@ -213,6 +226,9 @@ def build_snapshot(
             ``used_percentage`` it overrides the local estimate for that window
             and becomes ``confidence="official"``; the five-hour value also
             drives the exit-code status.
+        api_limits: optional opt-in experimental OAuth usage API limits. Fresh
+            official limits win; otherwise fresh API windows override local
+            estimates with ``confidence="experimental"``.
 
     Returns:
         The versioned snapshot dict (see module docstring).
@@ -222,6 +238,7 @@ def build_snapshot(
     current_time = _coerce_now(now)
 
     plan = getattr(args, "plan", "custom")
+    plan_info = Plans.get_plan_info(plan)
     data_path = getattr(args, "data_path", None)
     data_paths = getattr(args, "data_paths", None) or ([data_path] if data_path else [])
     has_limit = token_limit > 0
@@ -356,12 +373,14 @@ def build_snapshot(
     # A stale capture (older than the freshness TTL) must NOT drive status/display
     # as current truth — treat it like an expired window and fall back to the local
     # estimate, keeping the stale flag only as a transparency signal.
+    official_had_percentage = False
     if official and not official.get("stale"):
         off_five = official.get("five_hour") or {}
         if off_five.get("used_percentage") is not None:
             five_hour = _official_block(off_five)
             status_pct = off_five["used_percentage"]
             headline_confidence = _OFFICIAL
+            official_had_percentage = True
         off_seven = official.get("seven_day") or {}
         if off_seven.get("used_percentage") is not None:
             seven_day = _official_block(off_seven)
@@ -369,7 +388,27 @@ def build_snapshot(
             # official windows drive the exit status.
             seven_pct = off_seven["used_percentage"]
             status_pct = seven_pct if status_pct is None else max(status_pct, seven_pct)
-    elif official:
+            official_had_percentage = True
+    if not official_had_percentage and api_limits and not api_limits.get("stale"):
+        api_five = api_limits.get("five_hour") or {}
+        if api_five.get("used_percentage") is not None:
+            five_hour = _api_block(api_five)
+            status_pct = api_five["used_percentage"]
+            headline_confidence = _EXPERIMENTAL
+        api_seven = api_limits.get("seven_day") or {}
+        if api_seven.get("used_percentage") is not None:
+            seven_day = _api_block(api_seven)
+            seven_pct = api_seven["used_percentage"]
+            status_pct = seven_pct if status_pct is None else max(status_pct, seven_pct)
+            headline_confidence = _EXPERIMENTAL
+
+    if (
+        official
+        and official.get("stale")
+        and not (api_limits and not api_limits.get("stale"))
+    ):
+        snapshot_stale = True
+    if api_limits and api_limits.get("stale") and not official_had_percentage:
         snapshot_stale = True
 
     code, label = _status(active, status_pct)
@@ -397,6 +436,7 @@ def build_snapshot(
         "confidence": headline_confidence,
         "stale": snapshot_stale,
         "plan": plan,
+        "plan_info": plan_info,
         "limits": {
             "five_hour": five_hour,
             "seven_day": seven_day,

@@ -50,6 +50,18 @@ def test_no_header_produces_fewer_lines() -> None:
     assert len(without) < len(full)
 
 
+def test_team_plan_shows_unverified_estimate_label() -> None:
+    lines = SessionDisplayComponent().format_active_session_screen(
+        **_screen_kwargs(plan="team", no_header=True)
+    )
+    joined = "\n".join(lines)
+
+    assert "Token Usage" in joined
+    assert "Team limits are unverified estimates" in joined
+    assert "statusline" in joined
+    assert "--plan custom" in joined
+
+
 def test_no_emoji_strips_emoji_from_output() -> None:
     lines = SessionDisplayComponent().format_active_session_screen(
         **_screen_kwargs(), no_emoji=True

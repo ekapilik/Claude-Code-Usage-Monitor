@@ -49,6 +49,17 @@ def _official(five_pct=42.5, five_reset=1782579600, seven=None, stale=False) -> 
     return out
 
 
+def _api(five_pct=96.0, five_reset=1782579600, seven=None, stale=False) -> dict:
+    return {
+        "five_hour": {"used_percentage": five_pct, "resets_at_epoch": five_reset}
+        if five_pct is not None or five_reset is not None
+        else None,
+        "seven_day": seven,
+        "captured_at_epoch": 1751045000,
+        "stale": stale,
+    }
+
+
 def test_official_five_hour_overrides_local() -> None:
     snap = build_snapshot(
         _data(used=12000), _args(), token_limit=19000, official=_official()
@@ -158,6 +169,52 @@ def test_official_seven_day_exhaustion_drives_status() -> None:
     )
     assert snap["status"]["label"] == "limit_hit"
     assert snap["status"]["code"] == 11
+
+
+def test_experimental_api_five_hour_overrides_local_when_no_official() -> None:
+    snap = build_snapshot(
+        _data(used=1000),
+        _args(),
+        token_limit=19000,
+        api_limits=_api(five_pct=96.0),
+    )
+    five = snap["limits"]["five_hour"]
+    assert five["confidence"] == "experimental"
+    assert five["source"]["kind"] == "anthropic_oauth_usage_api"
+    assert five["used_percentage"] == 96.0
+    assert snap["confidence"] == "experimental"
+    assert snap["status"]["code"] == 10
+
+
+def test_fresh_official_wins_over_experimental_api() -> None:
+    snap = build_snapshot(
+        _data(used=1000),
+        _args(),
+        token_limit=19000,
+        official=_official(five_pct=12.0),
+        api_limits=_api(five_pct=99.0),
+    )
+    five = snap["limits"]["five_hour"]
+    assert five["confidence"] == "official"
+    assert five["source"]["kind"] == "statusline"
+    assert five["used_percentage"] == 12.0
+    assert snap["confidence"] == "official"
+    assert snap["status"]["code"] == 0
+
+
+def test_unusable_official_does_not_block_experimental_api() -> None:
+    snap = build_snapshot(
+        _data(used=1000),
+        _args(),
+        token_limit=19000,
+        official=_official(five_pct=None),
+        api_limits=_api(five_pct=96.0),
+    )
+
+    assert snap["limits"]["five_hour"]["confidence"] == "experimental"
+    assert snap["limits"]["five_hour"]["used_percentage"] == 96.0
+    assert snap["confidence"] == "experimental"
+    assert snap["status"]["code"] == 10
 
 
 def test_local_reset_prefers_limit_message_over_block_end() -> None:

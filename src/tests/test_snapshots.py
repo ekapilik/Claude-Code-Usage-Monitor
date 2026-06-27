@@ -80,6 +80,18 @@ def test_top_level_confidence_local_estimate() -> None:
     assert snap["source"]["kind"] == "claude_code_jsonl"
 
 
+def test_team_plan_is_labeled_unverified_estimate() -> None:
+    snap = build_snapshot(_data(), _args("team"), token_limit=19000)
+    info = snap["plan_info"]
+
+    assert snap["plan"] == "team"
+    assert info["name"] == "team"
+    assert info["confidence"] == "local_estimate"
+    assert info["unverified"] is True
+    assert "statusline" in info["guidance"]
+    assert "--plan custom" in info["guidance"]
+
+
 def test_total_tokens_is_cache_inclusive() -> None:
     snap = build_snapshot(_data(), _args(), token_limit=19000)
     # 8500 + 3508 + 5000 + 2000

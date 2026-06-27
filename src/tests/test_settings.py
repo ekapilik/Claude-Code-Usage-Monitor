@@ -258,10 +258,13 @@ class TestSettings:
         assert settings.debug is False
         assert settings.version is False
         assert settings.clear is False
+        assert settings.api is False
+        assert settings.api_cache_file is None
+        assert settings.api_ttl_seconds == 180
 
     def test_plan_validator_valid_values(self) -> None:
         """Test plan validator with valid values."""
-        valid_plans: List[str] = ["pro", "max5", "max20", "custom"]
+        valid_plans: List[str] = ["pro", "max5", "max20", "team", "custom"]
 
         for plan in valid_plans:
             settings = Settings(plan=plan, _cli_parse_args=[])
@@ -274,6 +277,9 @@ class TestSettings:
 
         settings = Settings(plan="Max5", _cli_parse_args=[])
         assert settings.plan == "max5"
+
+        settings = Settings(plan="TEAM", _cli_parse_args=[])
+        assert settings.plan == "team"
 
     def test_plan_validator_invalid_value(self) -> None:
         """Test plan validator with invalid value."""
@@ -820,6 +826,36 @@ class TestSettings:
         assert parsed.warehouse is True
         assert parsed.warehouse_file == "/tmp/cli-usage.json"
         assert parsed.warehouse_retention_days == 45
+
+    def test_api_usage_defaults_cli_and_namespace(self) -> None:
+        """The experimental OAuth usage API is opt-in and exposes cache knobs."""
+        default = Settings(_cli_parse_args=[])
+        assert default.api is False
+        assert default.api_cache_file is None
+        assert default.api_ttl_seconds == 180
+
+        namespace = Settings(
+            api=True,
+            api_cache_file="/tmp/api-cache.json",
+            api_ttl_seconds=45,
+            _cli_parse_args=[],
+        ).to_namespace()
+        assert namespace.api is True
+        assert namespace.api_cache_file == "/tmp/api-cache.json"
+        assert namespace.api_ttl_seconds == 45
+
+        parsed = Settings(
+            _cli_parse_args=[
+                "--api",
+                "--api-cache-file",
+                "/tmp/cli-api-cache.json",
+                "--api-ttl-seconds",
+                "60",
+            ]
+        )
+        assert parsed.api is True
+        assert parsed.api_cache_file == "/tmp/cli-api-cache.json"
+        assert parsed.api_ttl_seconds == 60
 
     def test_table_formatter_flags_default_cli_and_namespace(self) -> None:
         """PR #175's formatting knobs remain explicit and sparklines are opt-in."""

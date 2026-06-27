@@ -197,6 +197,60 @@ def test_once_consumes_official_limits(capsys: pytest.CaptureFixture) -> None:
     assert doc["confidence"] == "official"
 
 
+def test_once_api_usage_is_opt_in_experimental(
+    tmp_path: Path, capsys: pytest.CaptureFixture
+) -> None:
+    """--api uses experimental OAuth usage data when no fresh official limit exists."""
+    args = _args("json")
+    args.api = True
+    args.api_cache_file = str(tmp_path / "api.json")
+    args.api_ttl_seconds = 180
+    api_limits = {
+        "five_hour": {"used_percentage": 96.0, "resets_at_epoch": 1782579600},
+        "seven_day": None,
+        "captured_at_epoch": 1782570000,
+        "stale": False,
+        "source": {"kind": "anthropic_oauth_usage_api"},
+    }
+
+    with patch.object(
+        cli_main, "read_api_limits", return_value=api_limits, create=True
+    ):
+        rc = _run(args, _payload(total=1000))
+
+    doc = json.loads(capsys.readouterr().out)
+    assert rc == 10
+    assert doc["confidence"] == "experimental"
+    assert doc["limits"]["five_hour"]["confidence"] == "experimental"
+    assert doc["limits"]["five_hour"]["used_percentage"] == 96.0
+
+
+def test_once_fresh_official_skips_experimental_api(
+    tmp_path: Path, capsys: pytest.CaptureFixture
+) -> None:
+    """Fresh statusline data stays authoritative even when --api is enabled."""
+    args = _args("json")
+    args.api = True
+    args.api_cache_file = str(tmp_path / "api.json")
+    args.api_ttl_seconds = 180
+    official = {
+        "five_hour": {"used_percentage": 12.0, "resets_at_epoch": 1782579600},
+        "seven_day": None,
+        "captured_at_epoch": 1782570000,
+        "stale": False,
+    }
+
+    with patch.object(cli_main, "read_api_limits", create=True) as read_api:
+        rc = _run(args, _payload(total=1000), official=official)
+
+    doc = json.loads(capsys.readouterr().out)
+    assert read_api.call_count == 0
+    assert rc == 0
+    assert doc["confidence"] == "official"
+    assert doc["limits"]["five_hour"]["confidence"] == "official"
+    assert doc["limits"]["five_hour"]["used_percentage"] == 12.0
+
+
 def test_once_uses_all_discovered_data_paths(capsys: pytest.CaptureFixture) -> None:
     """One-shot mode must not collapse discovery to data_paths[0] (#127, #196)."""
     paths = (Path("/profiles/home/projects"), Path("/profiles/work/projects"))
