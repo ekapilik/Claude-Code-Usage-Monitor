@@ -774,6 +774,11 @@ class TestSettings:
         assert namespace.write_state is True
         assert namespace.state_file == "/tmp/s.json"
 
+    def test_compact_default_and_namespace(self) -> None:
+        """--compact defaults off and reaches the namespace (#65)."""
+        assert Settings(_cli_parse_args=[]).compact is False
+        assert Settings(compact=True, _cli_parse_args=[]).to_namespace().compact is True
+
 
 class TestSettingsIntegration:
     """Integration tests for Settings class."""

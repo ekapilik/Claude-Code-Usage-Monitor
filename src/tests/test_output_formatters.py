@@ -2,7 +2,12 @@
 
 import json
 
-from claude_monitor.output import build_snapshot, format_json, format_text
+from claude_monitor.output import (
+    build_snapshot,
+    format_compact,
+    format_json,
+    format_text,
+)
 
 _SNAP = {
     "schema_version": "1.0",
@@ -40,3 +45,31 @@ def test_format_text_no_rich_markup() -> None:
 
 def test_package_exports_build_snapshot() -> None:
     assert callable(build_snapshot)
+
+
+def test_format_compact_single_line() -> None:
+    snap = {
+        "limits": {
+            "five_hour": {
+                "used_percentage": 63.2,
+                "tokens_used": 12008,
+                "token_limit": 19000,
+                "resets_at": "2026-06-27T17:00:00+00:00",
+            }
+        },
+        "local": {"burn_rate_tokens_per_minute": 158.4, "cost_usd": 4.27},
+    }
+    line = format_compact(snap)
+    assert "\n" not in line
+    assert "63.2%" in line
+    assert "12.0K/19.0K" in line
+    assert "158/min" in line
+    assert "reset 17:00" in line
+    assert "$4.27" in line
+
+
+def test_format_compact_handles_missing_fields() -> None:
+    line = format_compact({"limits": {"five_hour": {}}, "local": {}})
+    assert "\n" not in line
+    assert "--%" in line
+    assert "reset --:--" in line

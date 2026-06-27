@@ -217,3 +217,35 @@ class TestFunctions:
                 paths = cli_main.discover_claude_data_paths()
 
             assert projects.resolve() in paths
+
+    def test_effective_token_limit_honors_explicit_custom(self) -> None:
+        """An explicit --custom-limit-tokens wins over a P90/computed base (#65)."""
+        import argparse
+        import importlib
+
+        cli_main = importlib.import_module("claude_monitor.cli.main")
+        args = argparse.Namespace(plan="custom", custom_limit_tokens=44000)
+
+        # Base is whatever the orchestrator computed (e.g. a P90 estimate).
+        assert cli_main._effective_token_limit(args, 19000) == 44000
+
+    def test_effective_token_limit_falls_back_to_base(self) -> None:
+        """Without an explicit custom limit, the computed base is used unchanged."""
+        import argparse
+        import importlib
+
+        cli_main = importlib.import_module("claude_monitor.cli.main")
+
+        assert (
+            cli_main._effective_token_limit(
+                argparse.Namespace(plan="pro", custom_limit_tokens=None), 19000
+            )
+            == 19000
+        )
+        # Custom plan but no explicit token count -> still the base.
+        assert (
+            cli_main._effective_token_limit(
+                argparse.Namespace(plan="custom", custom_limit_tokens=None), 7000
+            )
+            == 7000
+        )

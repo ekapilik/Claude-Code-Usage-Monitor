@@ -136,3 +136,14 @@ def test_once_write_state_writes_file(
     _run(args, _payload())
     capsys.readouterr()
     assert json.loads(state.read_text())["schema_version"] == "1.0"
+
+
+def test_once_compact_prints_single_line(capsys: pytest.CaptureFixture) -> None:
+    """--once --compact prints one glanceable line, not the full TUI or JSON (#65)."""
+    args = argparse.Namespace(
+        output="rich", plan="pro", refresh_rate=10, theme="dark", compact=True
+    )
+    _run(args, _payload())
+    out = capsys.readouterr().out.strip()
+    assert "\n" not in out
+    assert out.startswith("claude") and "%" in out and "reset" in out

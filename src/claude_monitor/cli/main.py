@@ -26,7 +26,12 @@ from claude_monitor.data.aggregator import UsageAggregator
 from claude_monitor.data.analysis import analyze_usage
 from claude_monitor.error_handling import report_error
 from claude_monitor.monitoring.orchestrator import MonitoringOrchestrator
-from claude_monitor.output import build_snapshot, format_json, format_text
+from claude_monitor.output import (
+    build_snapshot,
+    format_compact,
+    format_json,
+    format_text,
+)
 from claude_monitor.output.state import default_state_path, write_state_file
 from claude_monitor.terminal.manager import (
     enter_alternate_screen,
@@ -115,6 +120,21 @@ def _maybe_write_state(args: argparse.Namespace, snapshot: dict) -> None:
         logging.getLogger(__name__).warning(f"Failed to write state file: {e}")
 
 
+def _effective_token_limit(args: argparse.Namespace, base_limit: int) -> int:
+    """Resolve the token limit to display.
+
+    An explicit ``--custom-limit-tokens`` always wins over a computed base
+    (the orchestrator recomputes a P90 estimate for custom plans and would
+    otherwise mask the user's chosen limit). Shared by the one-shot and live
+    paths so ``--compact`` shows the same denominator either way.
+    """
+    if getattr(args, "plan", None) == "custom" and getattr(
+        args, "custom_limit_tokens", None
+    ):
+        return int(args.custom_limit_tokens)
+    return base_limit
+
+
 def _run_once(args: argparse.Namespace) -> int:
     """One-shot mode: pull usage once, print a snapshot, and exit (issue #126).
 
@@ -149,12 +169,9 @@ def _run_once(args: argparse.Namespace) -> int:
     blocks = data.get("blocks", []) or []
     # Honor an explicit --custom-limit-tokens, mirroring the live path; otherwise
     # use the orchestrator's token_limit or a P90 estimate.
-    if args.plan == "custom" and getattr(args, "custom_limit_tokens", None):
-        token_limit = int(args.custom_limit_tokens)
-    else:
-        token_limit = monitoring_data.get("token_limit") or get_token_limit(
-            args.plan, blocks
-        )
+    token_limit = _effective_token_limit(
+        args, monitoring_data.get("token_limit") or get_token_limit(args.plan, blocks)
+    )
 
     snapshot = build_snapshot(data, args, token_limit)
     output = getattr(args, "output", "rich")
@@ -162,6 +179,8 @@ def _run_once(args: argparse.Namespace) -> int:
         print(format_json(snapshot))
     elif output == "text":
         print(format_text(snapshot))
+    elif getattr(args, "compact", False):
+        print(format_compact(snapshot))
     else:
         console = get_themed_console(
             force_theme=args.theme.lower() if getattr(args, "theme", None) else None
@@ -304,22 +323,27 @@ def _run_monitoring(args: argparse.Namespace) -> None:
                             total_tokens: int = active_blocks[0].get("totalTokens", 0)
                             logger.debug(f"Active block tokens: {total_tokens}")
 
-                    renderable = display_controller.create_data_display(
-                        data, args, monitoring_data.get("token_limit", token_limit)
+                    token_limit_now = _effective_token_limit(
+                        args, monitoring_data.get("token_limit", token_limit)
                     )
+                    snapshot = None
+                    if getattr(args, "compact", False) or getattr(
+                        args, "write_state", False
+                    ):
+                        snapshot = build_snapshot(data, args, token_limit_now)
+
+                    if getattr(args, "compact", False):
+                        renderable = format_compact(snapshot)
+                    else:
+                        renderable = display_controller.create_data_display(
+                            data, args, token_limit_now
+                        )
 
                     if live_display:
                         live_display.update(renderable)
 
-                    if getattr(args, "write_state", False):
-                        _maybe_write_state(
-                            args,
-                            build_snapshot(
-                                data,
-                                args,
-                                monitoring_data.get("token_limit", token_limit),
-                            ),
-                        )
+                    if snapshot is not None and getattr(args, "write_state", False):
+                        _maybe_write_state(args, snapshot)
 
                 except Exception as e:
                     logger.error(f"Display update error: {e}", exc_info=True)

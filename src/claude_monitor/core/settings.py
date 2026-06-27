@@ -188,6 +188,11 @@ class Settings(BaseSettings):
         description="Measure usage once, print a snapshot, and exit (no live loop)",
     )
 
+    compact: bool = Field(
+        default=False,
+        description="Single-line compact output (works live and one-shot)",
+    )
+
     output: Literal["rich", "json", "text"] = Field(
         default="rich",
         description="One-shot output format (rich, json, text)",
@@ -407,6 +412,7 @@ class Settings(BaseSettings):
         args.no_header = not self.header
         args.no_emoji = not self.emoji
         args.once = self.once
+        args.compact = self.compact
         args.output = self.output
         args.write_state = self.write_state
         args.state_file = self.state_file

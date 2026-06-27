@@ -16,6 +16,7 @@
 - **`--no-header` / `--no-emoji`**: hide the header banner, or render the live view without emoji (plain output). (#57)
 - **`--once --output {rich,json,text}`**: one-shot, machine-readable usage snapshot for hooks/CI/companions instead of parsing the live TUI. Emits a versioned schema (`schema_version`, `source`, `confidence`, `limits`, `local`, `local_history`, `forecast`) with every number labeled `local_estimate`, plus automation exit codes (0 ok, 10 near limit, 11 limit hit, 20 indeterminate, 30 no data). Official account/weekly limits are shaped in but deferred until the statusline reader lands. (#126)
 - **`--write-state`**: continuously write the same versioned snapshot to a state file (default `~/.claude-monitor/state/latest.json`, override with `--state-file`) that status bars, tray apps, and dashboards can poll. Writes are atomic (temp file + replace) so a reader never sees a partial file; reuses the one-shot builder. (#184)
+- **`--compact`**: single-line output for tmux/status bars — usage percent, tokens used/limit, burn rate, reset time, and session cost on one line. Works both live (updates in place) and one-shot with `--once`. Built from the same snapshot as `--once`, so the numbers never diverge from the full views. (#65, #17, #111)
 
 ## [3.1.0] - 2025-07-23
 
