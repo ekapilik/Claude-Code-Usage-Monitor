@@ -4,6 +4,7 @@
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 [![PRs Welcome](https://img.shields.io/badge/PRs-welcome-brightgreen.svg)](http://makeapullrequest.com)
 [![codecov](https://codecov.io/gh/Maciek-roboblog/Claude-Code-Usage-Monitor/branch/main/graph/badge.svg)](https://codecov.io/gh/Maciek-roboblog/Claude-Code-Usage-Monitor)
+[![Mentioned in Awesome Claude Code](https://awesome.re/mentioned-badge.svg)](https://github.com/hesreallyhim/awesome-claude-code)
 
 A beautiful real-time terminal monitoring tool for Claude AI token usage with advanced analytics, machine learning-based predictions, and Rich UI. Track your token consumption, burn rate, cost analysis, and get intelligent predictions about session limits.
 
@@ -37,6 +38,7 @@ A beautiful real-time terminal monitoring tool for Claude AI token usage with ad
   - [Installation Issues](#installation-issues)
   - [Runtime Issues](#runtime-issues)
 - [📞 Contact](#-contact)
+- [Related Tools](#related-tools)
 - [📚 Additional Documentation](#-additional-documentation)
 - [📝 License](#-license)
 - [🤝 Contributors](#-contributors)
@@ -1141,6 +1143,50 @@ If you encounter the error No active session found, please follow these steps:
 CLAUDE_CONFIG_DIR=~/.config/claude ./claude_monitor.py
 ```
 
+
+## Related Tools
+
+Claude Monitor stays a CLI-first, privacy-first core. GUIs, tray apps, hardware
+dashboards, and provider adapters belong in separate repositories; they should
+consume the state/export protocol through `--write-state` or
+`--once --output json` instead of parsing the Rich TUI or reimplementing the
+analyzer.
+
+```bash
+# Long-running file for status bars, tray apps, and dashboards
+claude-monitor --write-state --state-file ~/.claude-monitor/state/latest.json
+
+# One-shot JSON for hooks and scripts
+claude-monitor --once --output json
+```
+
+### Companion Displays
+
+- [Headroom](https://github.com/patwalls/headroom): menu bar companion that reads
+  Claude Code statusline output and focuses on official 5-hour and 7-day
+  utilization.
+- [claude-statusbar](https://github.com/leeguooooo/claude-code-usage-bar):
+  lightweight status bar display for terminal and IDE integrations.
+- [claude-monitor-cyd](https://github.com/amgb20/claude-monitor-cyd): ESP32
+  physical dashboard for local usage telemetry.
+- [Claude Code Usage Tracker](https://github.com/LyndonWangWork/Claude-Code-Usage-Tracker):
+  desktop usage tracker inspired by this project.
+- Native menu bar and system tray apps are welcome as separate companion
+  projects that consume the state file; they are not bundled into this Python
+  package.
+
+### Provider and Adapter Boundary
+
+Claude Monitor's built-in limit window is the Claude Code subscription quota.
+OpenCode, LiteLLM, Gemini/Qwen, z.ai, Bedrock, and other provider data should be
+modeled as separate source adapters with their own `source.kind`. Adapters should
+default to Claude Code data unless the user explicitly selects another source,
+and they must not auto-merge OpenCode/API/provider entries into the Claude
+5-hour subscription window.
+
+For Cursor and Claude Desktop there is no local usage/limit signal comparable to
+Claude Code's JSONL logs or statusline `rate_limits`, so they are out of scope
+for built-in live limit tracking unless such a signal becomes available.
 
 
 ## 📞 Contact
