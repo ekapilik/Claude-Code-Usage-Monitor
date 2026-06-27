@@ -31,6 +31,7 @@ from claude_monitor.output import (
     build_snapshot,
     format_compact,
     format_json,
+    format_terminal_title,
     format_text,
 )
 from claude_monitor.output.official import (
@@ -44,6 +45,7 @@ from claude_monitor.terminal.manager import (
     handle_cleanup_and_exit,
     handle_error_and_exit,
     restore_terminal,
+    set_terminal_title,
     setup_terminal,
 )
 from claude_monitor.terminal.themes import get_themed_console, print_themed
@@ -134,6 +136,13 @@ def _maybe_write_state(args: argparse.Namespace, snapshot: dict) -> bool:
         return False
 
 
+def _maybe_set_terminal_title(args: argparse.Namespace, snapshot: dict) -> None:
+    if not getattr(args, "set_terminal_title", False):
+        return
+    template = getattr(args, "title_format", "{pct}% {plan}")
+    set_terminal_title(format_terminal_title(snapshot, template))
+
+
 def _effective_token_limit(args: argparse.Namespace, base_limit: int) -> int:
     """Resolve the token limit to display.
 
@@ -189,6 +198,7 @@ def _run_once(args: argparse.Namespace) -> int:
 
     official = read_official_limits(now_epoch=int(time.time()))
     snapshot = build_snapshot(data, args, token_limit, official=official)
+    _maybe_set_terminal_title(args, snapshot)
     output = getattr(args, "output", "rich")
     if output == "json":
         print(format_json(snapshot))
@@ -384,13 +394,18 @@ def _run_monitoring(args: argparse.Namespace) -> None:
                         args, reported_limit if reported_limit else token_limit
                     )
                     snapshot = None
-                    if getattr(args, "compact", False) or getattr(
-                        args, "write_state", False
+                    if (
+                        getattr(args, "compact", False)
+                        or getattr(args, "write_state", False)
+                        or getattr(args, "set_terminal_title", False)
                     ):
                         official = read_official_limits(now_epoch=int(time.time()))
                         snapshot = build_snapshot(
                             data, args, token_limit_now, official=official
                         )
+
+                    if snapshot is not None:
+                        _maybe_set_terminal_title(args, snapshot)
 
                     if getattr(args, "compact", False):
                         renderable = format_compact(snapshot)

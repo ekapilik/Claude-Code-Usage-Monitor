@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import math
 from typing import Any, List
 
 
@@ -49,6 +50,46 @@ def format_compact(snapshot: dict) -> str:
 
     cost = local.get("cost_usd") or 0.0
     return f"claude {pct_s}{used_s} | {bpm_s} | reset {reset_s} | ${cost:.2f}"
+
+
+class _MissingTitleValue:
+    def __format__(self, _format_spec: str) -> str:
+        return "--"
+
+    def __str__(self) -> str:
+        return "--"
+
+
+_MISSING_TITLE_VALUE = _MissingTitleValue()
+
+
+def _title_number(value: Any) -> Any:
+    if value is None:
+        return _MISSING_TITLE_VALUE
+    if isinstance(value, (int, float)) and not math.isfinite(value):
+        return _MISSING_TITLE_VALUE
+    return value
+
+
+def _title_reset(value: Any) -> str:
+    if isinstance(value, str) and len(value) >= 16:
+        return value[11:16]
+    return "--:--"
+
+
+def format_terminal_title(snapshot: dict, template: str) -> str:
+    """Format a terminal title from the canonical snapshot fields (#142)."""
+    five = snapshot.get("limits", {}).get("five_hour", {})
+    local = snapshot.get("local", {})
+    values = {
+        "pct": _title_number(five.get("used_percentage")),
+        "plan": snapshot.get("plan") or "unknown",
+        "used": _title_number(five.get("tokens_used")),
+        "limit": _title_number(five.get("token_limit")),
+        "cost": _title_number(local.get("cost_usd")),
+        "reset": _title_reset(five.get("resets_at")),
+    }
+    return template.format(**values)
 
 
 def format_text(snapshot: dict) -> str:

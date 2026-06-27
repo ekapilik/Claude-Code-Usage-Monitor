@@ -39,6 +39,14 @@ def setup_terminal() -> Optional[List[Any]]:
         return None
 
 
+def set_terminal_title(text: str) -> None:
+    """Set the terminal window title when stdout is an interactive terminal."""
+    if not getattr(sys.stdout, "isatty", lambda: False)():
+        return
+    sys.stdout.write(f"\033]0;{text}\007")
+    sys.stdout.flush()
+
+
 def restore_terminal(old_settings: Optional[List[Any]]) -> None:
     """Restore terminal to original settings.
 

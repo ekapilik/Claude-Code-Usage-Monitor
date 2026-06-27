@@ -3,6 +3,7 @@
 import argparse
 import json
 import logging
+import string
 from datetime import datetime
 from pathlib import Path
 from typing import Any, Dict, List, Literal, Optional, Tuple
@@ -14,6 +15,8 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 from claude_monitor import __version__
 
 logger = logging.getLogger(__name__)
+
+_TITLE_FORMAT_KEYS = {"pct", "plan", "used", "limit", "cost", "reset"}
 
 
 class LastUsedParams:
@@ -221,6 +224,19 @@ class Settings(BaseSettings):
         "(default ~/.claude-monitor/state/latest.json)",
     )
 
+    set_terminal_title: bool = Field(
+        default=False,
+        description="Set the terminal title from the usage snapshot",
+    )
+
+    title_format: str = Field(
+        default="{pct}% {plan}",
+        description=(
+            "Terminal title template using {pct}, {plan}, {used}, {limit}, "
+            "{cost}, and {reset}"
+        ),
+    )
+
     @field_validator("output", mode="before")
     @classmethod
     def validate_output(cls, v: Any) -> str:
@@ -233,6 +249,36 @@ class Settings(BaseSettings):
             raise ValueError(
                 f"Invalid output: {v}. Must be one of: {', '.join(valid_outputs)}"
             )
+        return v
+
+    @field_validator("title_format", mode="before")
+    @classmethod
+    def validate_title_format(cls, v: Any) -> str:
+        """Validate terminal title templates without inventing a DSL."""
+        if not isinstance(v, str):
+            return v
+        try:
+            parsed = list(string.Formatter().parse(v))
+        except ValueError as e:
+            raise ValueError(f"Invalid title-format template: {e}") from e
+
+        for _literal, field_name, _format_spec, _conversion in parsed:
+            if field_name is None:
+                continue
+            if field_name not in _TITLE_FORMAT_KEYS:
+                raise ValueError(f"Unknown title-format key: {field_name}")
+
+        try:
+            v.format(
+                pct=12.3,
+                plan="pro",
+                used=1200,
+                limit=1900,
+                cost=1.23,
+                reset="17:00",
+            )
+        except (IndexError, KeyError, TypeError, ValueError) as e:
+            raise ValueError(f"Invalid title-format template: {e}") from e
         return v
 
     @field_validator("filter_models", mode="before")
@@ -443,5 +489,7 @@ class Settings(BaseSettings):
         args.write_state = self.write_state
         args.state_file = self.state_file
         args.filter_models = self.filter_models
+        args.set_terminal_title = self.set_terminal_title
+        args.title_format = self.title_format
 
         return args
