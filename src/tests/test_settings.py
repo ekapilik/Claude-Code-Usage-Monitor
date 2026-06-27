@@ -744,6 +744,24 @@ class TestSettings:
             persisted = mock_instance.save.call_args[0][0]
             assert persisted.theme == "auto"  # re-detects next launch
 
+    def test_once_and_output_defaults_and_namespace(self) -> None:
+        """--once defaults off; --output defaults rich; both reach the namespace (#126)."""
+        default = Settings(_cli_parse_args=[])
+        assert default.once is False
+        assert default.output == "rich"
+
+        namespace = Settings(once=True, output="json", _cli_parse_args=[]).to_namespace()
+        assert namespace.once is True
+        assert namespace.output == "json"
+
+    def test_output_validator_rejects_unknown(self) -> None:
+        """--output xml is rejected with a clear message (#126)."""
+        with pytest.raises(ValueError, match="Invalid output"):
+            Settings(output="xml", _cli_parse_args=[])
+
+    def test_output_lowercases_value(self) -> None:
+        assert Settings(output="JSON", _cli_parse_args=[]).output == "json"
+
 
 class TestSettingsIntegration:
     """Integration tests for Settings class."""

@@ -26,6 +26,7 @@ from claude_monitor.data.aggregator import UsageAggregator
 from claude_monitor.data.analysis import analyze_usage
 from claude_monitor.error_handling import report_error
 from claude_monitor.monitoring.orchestrator import MonitoringOrchestrator
+from claude_monitor.output import build_snapshot, format_json, format_text
 from claude_monitor.terminal.manager import (
     enter_alternate_screen,
     handle_cleanup_and_exit,
@@ -98,6 +99,62 @@ def _no_data_diagnostic(searched_paths: List[str]) -> str:
     )
 
 
+def _run_once(args: argparse.Namespace) -> int:
+    """One-shot mode: pull usage once, print a snapshot, and exit (issue #126).
+
+    Returns an automation-friendly exit code: 0 ok, 10 near limit, 11 limit hit,
+    20 no active session, 30 no data / config error.
+    """
+    data_paths = discover_claude_data_paths()
+    if not data_paths:
+        print(
+            _no_data_diagnostic(_env_claude_paths() + get_standard_claude_paths()),
+            file=sys.stderr,
+        )
+        return 30
+
+    data_path = data_paths[0]
+    args.data_path = str(data_path)
+
+    orchestrator = MonitoringOrchestrator(
+        update_interval=getattr(args, "refresh_rate", 10), data_path=str(data_path)
+    )
+    orchestrator.set_args(args)
+    try:
+        monitoring_data = orchestrator.force_refresh()
+    finally:
+        orchestrator.stop()
+
+    if monitoring_data is None:
+        print("No usage data available yet.", file=sys.stderr)
+        return 30
+
+    data = monitoring_data.get("data", {}) or {}
+    blocks = data.get("blocks", []) or []
+    # Honor an explicit --custom-limit-tokens, mirroring the live path; otherwise
+    # use the orchestrator's token_limit or a P90 estimate.
+    if args.plan == "custom" and getattr(args, "custom_limit_tokens", None):
+        token_limit = int(args.custom_limit_tokens)
+    else:
+        token_limit = monitoring_data.get("token_limit") or get_token_limit(
+            args.plan, blocks
+        )
+
+    snapshot = build_snapshot(data, args, token_limit)
+    output = getattr(args, "output", "rich")
+    if output == "json":
+        print(format_json(snapshot))
+    elif output == "text":
+        print(format_text(snapshot))
+    else:
+        console = get_themed_console(
+            force_theme=args.theme.lower() if getattr(args, "theme", None) else None
+        )
+        console.print(DisplayController().create_data_display(data, args, token_limit))
+
+    return snapshot["status"]["code"]
+
+
 def main(argv: Optional[List[str]] = None) -> int:
     """Main entry point with direct pydantic-settings integration."""
     if argv is None:
@@ -107,10 +164,12 @@ def main(argv: Optional[List[str]] = None) -> int:
         print(f"claude-monitor {__version__}")
         return 0
 
+    once_mode = "--once" in argv
+
     env_error = validate_cli_environment()
     if env_error:
         print(env_error, file=sys.stderr)
-        return 1
+        return 30 if once_mode else 1
 
     try:
         settings = Settings.load_with_last_used(argv)
@@ -127,6 +186,9 @@ def main(argv: Optional[List[str]] = None) -> int:
 
         args = settings.to_namespace()
 
+        if settings.once:
+            return _run_once(args)
+
         _run_monitoring(args)
 
         return 0
@@ -138,7 +200,7 @@ def main(argv: Optional[List[str]] = None) -> int:
         logger = logging.getLogger(__name__)
         logger.error(f"Monitor failed: {e}", exc_info=True)
         traceback.print_exc()
-        return 1
+        return 30 if once_mode else 1
 
 
 def _run_monitoring(args: argparse.Namespace) -> None:

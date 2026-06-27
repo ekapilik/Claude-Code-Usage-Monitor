@@ -59,6 +59,7 @@ class TestMain:
         mock_settings.log_file = None
         mock_settings.log_level = "INFO"
         mock_settings.timezone = "UTC"
+        mock_settings.once = False  # live path, not one-shot (#126)
         mock_settings.to_namespace.return_value = mock_args
 
         mock_load_settings.return_value = mock_settings

@@ -183,6 +183,30 @@ class Settings(BaseSettings):
         default=True, description="Show emoji (--no-emoji for plain output)"
     )
 
+    once: bool = Field(
+        default=False,
+        description="Measure usage once, print a snapshot, and exit (no live loop)",
+    )
+
+    output: Literal["rich", "json", "text"] = Field(
+        default="rich",
+        description="One-shot output format (rich, json, text)",
+    )
+
+    @field_validator("output", mode="before")
+    @classmethod
+    def validate_output(cls, v: Any) -> str:
+        """Validate and normalize output format value."""
+        if isinstance(v, str):
+            v_lower = v.lower()
+            valid_outputs = ["rich", "json", "text"]
+            if v_lower in valid_outputs:
+                return v_lower
+            raise ValueError(
+                f"Invalid output: {v}. Must be one of: {', '.join(valid_outputs)}"
+            )
+        return v
+
     @field_validator("plan", mode="before")
     @classmethod
     def validate_plan(cls, v: Any) -> str:
@@ -371,5 +395,7 @@ class Settings(BaseSettings):
         args.hide_model_distribution = self.hide_model_distribution
         args.no_header = not self.header
         args.no_emoji = not self.emoji
+        args.once = self.once
+        args.output = self.output
 
         return args

@@ -14,6 +14,7 @@
 ### Features
 - **`--hide-model-distribution`**: new flag to hide the model distribution bar in the live view. (#161)
 - **`--no-header` / `--no-emoji`**: hide the header banner, or render the live view without emoji (plain output). (#57)
+- **`--once --output {rich,json,text}`**: one-shot, machine-readable usage snapshot for hooks/CI/companions instead of parsing the live TUI. Emits a versioned schema (`schema_version`, `source`, `confidence`, `limits`, `local`, `local_history`, `forecast`) with every number labeled `local_estimate`, plus automation exit codes (0 ok, 10 near limit, 11 limit hit, 20 indeterminate, 30 no data). Official account/weekly limits are shaped in but deferred until the statusline reader lands. (#126)
 
 ## [3.1.0] - 2025-07-23
 
