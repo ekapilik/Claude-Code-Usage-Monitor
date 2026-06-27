@@ -77,6 +77,39 @@ class TestSessionAnalyzer:
         assert len(blocks) == 1
         assert len(blocks[0].entries) == 2
 
+    def test_transform_to_blocks_separates_same_window_different_accounts(self) -> None:
+        """Entries from different accounts/providers must not share a 5h block."""
+        analyzer = SessionAnalyzer()
+
+        base_time = datetime(2024, 1, 1, 12, 0, tzinfo=timezone.utc)
+        entries = [
+            UsageEntry(
+                timestamp=base_time,
+                input_tokens=100,
+                output_tokens=50,
+                cost_usd=0.001,
+                model="claude-3-haiku",
+                source={"kind": "claude_code_jsonl", "account": "/home"},
+            ),
+            UsageEntry(
+                timestamp=base_time + timedelta(minutes=30),
+                input_tokens=200,
+                output_tokens=100,
+                cost_usd=0.002,
+                model="claude-3-haiku",
+                source={"kind": "claude_code_jsonl", "account": "/work"},
+            ),
+        ]
+
+        blocks = analyzer.transform_to_blocks(entries)
+
+        assert len(blocks) == 2
+        assert [block.source for block in blocks] == [
+            {"kind": "claude_code_jsonl", "account": "/home"},
+            {"kind": "claude_code_jsonl", "account": "/work"},
+        ]
+        assert [block.total_tokens for block in blocks] == [150, 300]
+
     def test_transform_to_blocks_multiple_blocks(self) -> None:
         """Test transform_to_blocks creating multiple blocks."""
         analyzer = SessionAnalyzer()

@@ -9,7 +9,7 @@ import logging
 from datetime import datetime, timedelta
 from datetime import timezone as tz
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Set, Tuple
+from typing import Any, Dict, List, Optional, Sequence, Set, Tuple, Union
 
 from claude_monitor.core.data_processors import (
     DataConverter,
@@ -28,9 +28,36 @@ TOKEN_OUTPUT = "output_tokens"
 
 logger = logging.getLogger(__name__)
 
+DataPathInput = Optional[Union[str, Path, Sequence[Union[str, Path]]]]
+SOURCE_KIND_CLAUDE_JSONL = "claude_code_jsonl"
+
+
+def _normalize_data_paths(data_path: DataPathInput) -> List[Path]:
+    if data_path is None:
+        return [Path("~/.claude/projects").expanduser()]
+    if isinstance(data_path, (str, Path)):
+        raw_paths: Sequence[Union[str, Path]] = [data_path]
+    else:
+        raw_paths = data_path
+
+    paths: List[Path] = []
+    seen: Set[Path] = set()
+    for raw_path in raw_paths:
+        path = Path(raw_path).expanduser()
+        key = path.resolve() if path.exists() else path
+        if key in seen:
+            continue
+        seen.add(key)
+        paths.append(path)
+    return paths
+
+
+def _source_for_path(path: Path) -> Dict[str, Any]:
+    return {"kind": SOURCE_KIND_CLAUDE_JSONL, "account": str(path)}
+
 
 def load_usage_entries(
-    data_path: Optional[str] = None,
+    data_path: DataPathInput = None,
     hours_back: Optional[int] = None,
     mode: CostMode = CostMode.AUTO,
     include_raw: bool = False,
@@ -39,7 +66,8 @@ def load_usage_entries(
     """Load and convert JSONL files to UsageEntry objects.
 
     Args:
-        data_path: Path to Claude data directory (defaults to ~/.claude/projects)
+        data_path: Path or paths to Claude data directories
+            (defaults to ~/.claude/projects)
         hours_back: Only include entries from last N hours
         mode: Cost calculation mode
         include_raw: Whether to return raw JSON data alongside entries
@@ -51,7 +79,7 @@ def load_usage_entries(
     Returns:
         Tuple of (usage_entries, raw_data) where raw_data is None unless include_raw=True
     """
-    data_path = Path(data_path if data_path else "~/.claude/projects").expanduser()
+    data_paths = _normalize_data_paths(data_path)
     timezone_handler = TimezoneHandler()
     pricing_calculator = PricingCalculator()
 
@@ -59,16 +87,22 @@ def load_usage_entries(
     if hours_back:
         cutoff_time = datetime.now(tz.utc) - timedelta(hours=hours_back)
 
-    jsonl_files = _find_jsonl_files(data_path)
+    files_by_source: List[Tuple[Path, Dict[str, Any]]] = []
+    for path in data_paths:
+        files_by_source.extend(
+            (file_path, _source_for_path(path)) for file_path in _find_jsonl_files(path)
+        )
+
+    jsonl_files = [file_path for file_path, _source in files_by_source]
     if not jsonl_files:
-        logger.warning("No JSONL files found in %s", data_path)
+        logger.warning("No JSONL files found in %s", data_paths)
         return [], None
 
     all_entries: List[UsageEntry] = []
     raw_entries: Optional[List[Dict[str, Any]]] = [] if include_raw else None
     processed_hashes: Set[str] = set()
 
-    for file_path in jsonl_files:
+    for file_path, source in files_by_source:
         entries, raw_data = _process_single_file(
             file_path,
             mode,
@@ -77,6 +111,7 @@ def load_usage_entries(
             include_raw,
             timezone_handler,
             pricing_calculator,
+            source,
         )
         all_entries.extend(entries)
         if include_raw and raw_data:
@@ -96,7 +131,7 @@ def load_usage_entries(
     return all_entries, raw_entries
 
 
-def load_all_raw_entries(data_path: Optional[str] = None) -> List[Dict[str, Any]]:
+def load_all_raw_entries(data_path: DataPathInput = None) -> List[Dict[str, Any]]:
     """Load all raw JSONL entries without processing.
 
     Args:
@@ -105,8 +140,9 @@ def load_all_raw_entries(data_path: Optional[str] = None) -> List[Dict[str, Any]
     Returns:
         List of raw JSON dictionaries
     """
-    data_path = Path(data_path if data_path else "~/.claude/projects").expanduser()
-    jsonl_files = _find_jsonl_files(data_path)
+    jsonl_files: List[Path] = []
+    for path in _normalize_data_paths(data_path):
+        jsonl_files.extend(_find_jsonl_files(path))
 
     all_raw_entries: List[Dict[str, Any]] = []
     for file_path in jsonl_files:
@@ -142,6 +178,7 @@ def _process_single_file(
     include_raw: bool,
     timezone_handler: TimezoneHandler,
     pricing_calculator: PricingCalculator,
+    source: Optional[Dict[str, Any]] = None,
 ) -> Tuple[List[UsageEntry], Optional[List[Dict[str, Any]]]]:
     """Process a single JSONL file."""
     entries: List[UsageEntry] = []
@@ -169,7 +206,7 @@ def _process_single_file(
                         continue
 
                     entry = _map_to_usage_entry(
-                        data, mode, timezone_handler, pricing_calculator
+                        data, mode, timezone_handler, pricing_calculator, source
                     )
                     if entry:
                         entries_mapped += 1
@@ -177,7 +214,10 @@ def _process_single_file(
                         _update_processed_hashes(data, processed_hashes)
 
                     if include_raw:
-                        raw_data.append(data)
+                        raw_entry = dict(data)
+                        if source is not None:
+                            raw_entry["source"] = source
+                        raw_data.append(raw_entry)
 
                 except json.JSONDecodeError as e:
                     logger.debug(f"Failed to parse JSON line in {file_path}: {e}")
@@ -244,6 +284,7 @@ def _map_to_usage_entry(
     mode: CostMode,
     timezone_handler: TimezoneHandler,
     pricing_calculator: PricingCalculator,
+    source: Optional[Dict[str, Any]] = None,
 ) -> Optional[UsageEntry]:
     """Map raw data to UsageEntry with proper cost calculation."""
     try:
@@ -282,6 +323,7 @@ def _map_to_usage_entry(
             model=model,
             message_id=message_id,
             request_id=request_id,
+            source=source or {"kind": SOURCE_KIND_CLAUDE_JSONL, "account": None},
         )
 
     except (KeyError, ValueError, TypeError, AttributeError) as e:

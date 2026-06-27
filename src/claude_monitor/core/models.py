@@ -16,6 +16,10 @@ class CostMode(Enum):
     CALCULATED = "calculate"
 
 
+def default_source() -> Dict[str, Any]:
+    return {"kind": "claude_code_jsonl", "account": None}
+
+
 @dataclass
 class UsageEntry:
     """Individual usage record from Claude usage data."""
@@ -29,6 +33,7 @@ class UsageEntry:
     model: str = ""
     message_id: str = ""
     request_id: str = ""
+    source: Dict[str, Any] = field(default_factory=default_source)
 
 
 @dataclass
@@ -88,6 +93,7 @@ class SessionBlock:
     limit_messages: List[Dict[str, Any]] = field(default_factory=list)
     projection_data: Optional[Dict[str, Any]] = None
     burn_rate_snapshot: Optional[BurnRate] = None
+    source: Dict[str, Any] = field(default_factory=default_source)
     # Reset time parsed from a limit message in this block, when present. Preferred
     # over start+5h for displaying the reset, since it is what Claude actually told
     # the user (issues #114, #106). Does not mutate end_time / block segmentation.

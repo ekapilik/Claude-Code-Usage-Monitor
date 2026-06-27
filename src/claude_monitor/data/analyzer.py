@@ -44,6 +44,32 @@ class SessionAnalyzer:
         if not entries:
             return []
 
+        grouped_entries: Dict[Tuple[str, Optional[str]], List[UsageEntry]] = {}
+        for entry in entries:
+            source = entry.source or {}
+            key = (str(source.get("kind") or "unknown"), source.get("account"))
+            grouped_entries.setdefault(key, []).append(entry)
+
+        if len(grouped_entries) > 1:
+            blocks: List[SessionBlock] = []
+            for source_entries in grouped_entries.values():
+                blocks.extend(self._transform_single_source(source_entries))
+            blocks.sort(
+                key=lambda block: (
+                    block.start_time,
+                    str((block.source or {}).get("kind") or ""),
+                    str((block.source or {}).get("account") or ""),
+                )
+            )
+            self._mark_active_blocks(blocks)
+            return blocks
+
+        blocks = self._transform_single_source(entries)
+        self._mark_active_blocks(blocks)
+        return blocks
+
+    def _transform_single_source(self, entries: List[UsageEntry]) -> List[SessionBlock]:
+        """Create session blocks for entries from one provenance source."""
         blocks = []
         current_block = None
 
@@ -73,9 +99,6 @@ class SessionAnalyzer:
             self._finalize_block(current_block)
             blocks.append(current_block)
 
-        # Mark active blocks
-        self._mark_active_blocks(blocks)
-
         return blocks
 
     def detect_limits(self, raw_entries: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
@@ -92,12 +115,17 @@ class SessionAnalyzer:
         for raw_data in raw_entries:
             limit_info = self._detect_single_limit(raw_data)
             if limit_info:
+                if raw_data.get("source"):
+                    limit_info["source"] = raw_data["source"]
                 limits.append(limit_info)
 
         return limits
 
     def _should_create_new_block(self, block: SessionBlock, entry: UsageEntry) -> bool:
         """Check if new block is needed."""
+        if block.source != entry.source:
+            return True
+
         if entry.timestamp >= block.end_time:
             return True
 
@@ -120,6 +148,11 @@ class SessionAnalyzer:
         start_time = self._round_to_hour(entry.timestamp)
         end_time = start_time + self.session_duration
         block_id = start_time.isoformat()
+        source = dict(entry.source or {})
+        source_kind = source.get("kind")
+        source_account = source.get("account")
+        if source_account:
+            block_id = f"{block_id}|{source_kind}:{source_account}"
 
         return SessionBlock(
             id=block_id,
@@ -128,6 +161,7 @@ class SessionAnalyzer:
             entries=[],
             token_counts=TokenCounts(),
             cost_usd=0.0,
+            source=source,
         )
 
     def _add_entry_to_block(self, block: SessionBlock, entry: UsageEntry) -> None:
@@ -202,6 +236,7 @@ class SessionAnalyzer:
                 token_counts=TokenCounts(),
                 cost_usd=0.0,
                 models=[],
+                source=dict(last_block.source or {}),
             )
 
         return None

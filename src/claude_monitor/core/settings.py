@@ -224,6 +224,11 @@ class Settings(BaseSettings):
         "(default ~/.claude-monitor/state/latest.json)",
     )
 
+    data_paths: List[str] = Field(
+        default_factory=list,
+        description="Claude data directories to scan; repeat or comma-separate values",
+    )
+
     set_terminal_title: bool = Field(
         default=False,
         description="Set the terminal title from the usage snapshot",
@@ -280,6 +285,25 @@ class Settings(BaseSettings):
         except (IndexError, KeyError, TypeError, ValueError) as e:
             raise ValueError(f"Invalid title-format template: {e}") from e
         return v
+
+    @field_validator("data_paths", mode="before")
+    @classmethod
+    def validate_data_paths(cls, v: Any) -> Any:
+        """Reject blank data paths while letting pydantic parse list syntax."""
+        if v is None:
+            return v
+        if isinstance(v, str):
+            parts = [part.strip() for part in v.split(",")]
+        else:
+            parts = []
+            for item in v:
+                if isinstance(item, str):
+                    parts.extend(part.strip() for part in item.split(","))
+                else:
+                    parts.append(item)
+        if any(isinstance(part, str) and not part for part in parts):
+            raise ValueError("data-paths entries must not be blank")
+        return parts
 
     @field_validator("filter_models", mode="before")
     @classmethod
@@ -488,6 +512,7 @@ class Settings(BaseSettings):
         args.output = self.output
         args.write_state = self.write_state
         args.state_file = self.state_file
+        args.data_paths = list(self.data_paths)
         args.filter_models = self.filter_models
         args.set_terminal_title = self.set_terminal_title
         args.title_format = self.title_format

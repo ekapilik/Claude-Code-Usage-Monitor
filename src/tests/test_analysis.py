@@ -377,6 +377,21 @@ class TestLimitFunctions:
 
         assert _is_limit_in_block_timerange(limit_info, block) is True
 
+    def test_is_limit_in_block_timerange_requires_matching_source(self) -> None:
+        """A limit message from one account must not attach to another account."""
+        block = SessionBlock(
+            id="test_block",
+            start_time=datetime(2024, 1, 1, 12, 0, tzinfo=timezone.utc),
+            end_time=datetime(2024, 1, 1, 17, 0, tzinfo=timezone.utc),
+            source={"kind": "claude_code_jsonl", "account": "/home"},
+        )
+        limit_info = {
+            "timestamp": datetime(2024, 1, 1, 14, 0, tzinfo=timezone.utc),
+            "source": {"kind": "claude_code_jsonl", "account": "/work"},
+        }
+
+        assert _is_limit_in_block_timerange(limit_info, block) is False
+
     def test_format_limit_info_complete(self) -> None:
         """Test _format_limit_info with all fields."""
         limit_info = {
@@ -428,6 +443,7 @@ class TestBlockConversion:
             model="claude-3-haiku",
             message_id="msg_1",
             request_id="req_1",
+            source={"kind": "claude_code_jsonl", "account": "/home"},
         )
 
         entry2 = UsageEntry(
@@ -455,6 +471,7 @@ class TestBlockConversion:
             "model": "claude-3-haiku",
             "messageId": "msg_1",
             "requestId": "req_1",
+            "source": {"kind": "claude_code_jsonl", "account": "/home"},
         }
 
     def test_create_base_block_dict(self) -> None:
@@ -485,6 +502,7 @@ class TestBlockConversion:
             per_model_stats={"claude-3-haiku": {"input_tokens": 100}},
             sent_messages_count=1,
             entries=[entry],
+            source={"kind": "claude_code_jsonl", "account": "/home"},
         )
 
         result = _create_base_block_dict(block)
@@ -505,10 +523,13 @@ class TestBlockConversion:
             "durationMinutes",
             "entries",
             "entries_count",
+            "source",
         ]
 
         for key in expected_keys:
             assert key in result
+
+        assert result["source"] == {"kind": "claude_code_jsonl", "account": "/home"}
 
         assert result["id"] == "test_block"
         assert result["isActive"] is True

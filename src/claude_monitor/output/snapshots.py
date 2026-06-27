@@ -223,6 +223,7 @@ def build_snapshot(
 
     plan = getattr(args, "plan", "custom")
     data_path = getattr(args, "data_path", None)
+    data_paths = getattr(args, "data_paths", None) or ([data_path] if data_path else [])
     has_limit = token_limit > 0
 
     if active is not None:
@@ -391,7 +392,7 @@ def build_snapshot(
         "source": {
             "kind": _KIND,
             "account": None,
-            "data_paths": [data_path] if data_path else [],
+            "data_paths": list(data_paths),
         },
         "confidence": headline_confidence,
         "stale": snapshot_stale,

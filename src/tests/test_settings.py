@@ -794,6 +794,24 @@ class TestSettings:
         with pytest.raises(ValidationError):
             Settings(filter_models="openai", _cli_parse_args=[])
 
+    def test_data_paths_default_cli_and_namespace(self) -> None:
+        """--data-paths is a pydantic-settings list field, not a manual parser."""
+        default = Settings(_cli_parse_args=[])
+        assert default.data_paths == []
+        assert default.to_namespace().data_paths == []
+
+        parsed = Settings(
+            _cli_parse_args=["--data-paths", "/a", "--data-paths", "/b,/c"]
+        )
+        assert parsed.data_paths == ["/a", "/b", "/c"]
+        assert parsed.to_namespace().data_paths == ["/a", "/b", "/c"]
+
+    def test_data_paths_rejects_blank_values(self) -> None:
+        from pydantic import ValidationError
+
+        with pytest.raises(ValidationError):
+            Settings(data_paths=["/a", "  "], _cli_parse_args=[])
+
 
 class TestSettingsIntegration:
     """Integration tests for Settings class."""

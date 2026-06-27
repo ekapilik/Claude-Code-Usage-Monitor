@@ -91,6 +91,17 @@ class TestMonitoringOrchestratorInit:
             assert orchestrator.update_interval == 5
             mock_dm.assert_called_once_with(cache_ttl=5, data_path="/custom/path")
 
+    def test_init_with_multiple_data_paths(self) -> None:
+        """Multiple data roots are preserved for the data manager (#196)."""
+        data_paths = ["/home/projects", "/work/projects"]
+        with (
+            patch("claude_monitor.monitoring.orchestrator.DataManager") as mock_dm,
+            patch("claude_monitor.monitoring.orchestrator.SessionMonitor"),
+        ):
+            MonitoringOrchestrator(update_interval=5, data_path=data_paths)
+
+            mock_dm.assert_called_once_with(cache_ttl=5, data_path=data_paths)
+
 
 class TestMonitoringOrchestratorLifecycle:
     """Test orchestrator start/stop lifecycle."""

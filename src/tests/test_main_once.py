@@ -48,9 +48,10 @@ def _payload(active: bool = True, total: int = 12008) -> dict:
 
 class _FakeOrch:
     payload: Optional[dict] = None
+    init_kwargs: list[dict[str, Any]] = []
 
-    def __init__(self, **_: Any) -> None:
-        pass
+    def __init__(self, **kwargs: Any) -> None:
+        type(self).init_kwargs.append(kwargs)
 
     def set_args(self, _args: Any) -> None:
         pass
@@ -69,6 +70,7 @@ def _run(
     official=None,
 ):
     _FakeOrch.payload = payload
+    _FakeOrch.init_kwargs = []
     with (
         patch.object(cli_main, "discover_claude_data_paths", return_value=list(paths)),
         patch.object(cli_main, "MonitoringOrchestrator", _FakeOrch),
@@ -184,6 +186,17 @@ def test_once_consumes_official_limits(capsys: pytest.CaptureFixture) -> None:
     assert doc["limits"]["five_hour"]["confidence"] == "official"
     assert doc["limits"]["five_hour"]["used_percentage"] == 88.0
     assert doc["confidence"] == "official"
+
+
+def test_once_uses_all_discovered_data_paths(capsys: pytest.CaptureFixture) -> None:
+    """One-shot mode must not collapse discovery to data_paths[0] (#127, #196)."""
+    paths = (Path("/profiles/home/projects"), Path("/profiles/work/projects"))
+
+    _run(_args("json"), _payload(), paths=paths)
+    doc = json.loads(capsys.readouterr().out)
+
+    assert _FakeOrch.init_kwargs[-1]["data_path"] == [str(p) for p in paths]
+    assert doc["source"]["data_paths"] == [str(p) for p in paths]
 
 
 def test_once_compact_prints_single_line(capsys: pytest.CaptureFixture) -> None:

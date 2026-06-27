@@ -123,14 +123,36 @@ class TestFunctions:
         """Test discover with custom paths."""
         from claude_monitor.cli.main import discover_claude_data_paths
 
-        custom_paths = ["/custom/path"]
+        custom_paths = ["/custom/path", "/other/path"]
         with (
             patch("pathlib.Path.exists", return_value=True),
             patch("pathlib.Path.is_dir", return_value=True),
         ):
             paths = discover_claude_data_paths(custom_paths)
-            assert len(paths) == 1
+            assert len(paths) == 2
             assert paths[0].name == "path"
+            assert paths[1].name == "path"
+
+    def test_discover_adds_wsl_paths_after_standard_paths(self, tmp_path: Path) -> None:
+        """WSL discovery is additive; it must not replace normal data paths (#92)."""
+        import importlib
+
+        cli_main = importlib.import_module("claude_monitor.cli.main")
+        standard = tmp_path / "standard" / "projects"
+        wsl = tmp_path / "wsl" / "projects"
+        standard.mkdir(parents=True)
+        wsl.mkdir(parents=True)
+
+        with (
+            patch.object(cli_main, "_env_claude_paths", return_value=[]),
+            patch.object(
+                cli_main, "get_standard_claude_paths", return_value=[str(standard)]
+            ),
+            patch.object(cli_main, "_wsl_claude_paths", return_value=[str(wsl)]),
+        ):
+            paths = cli_main.discover_claude_data_paths()
+
+        assert paths == [standard.resolve(), wsl.resolve()]
 
     def test_validate_cli_environment_requires_python_39(self) -> None:
         """Python below 3.9 is rejected with a clear message (issue #172)."""

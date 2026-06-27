@@ -3,7 +3,8 @@
 import logging
 import threading
 import time
-from typing import Any, Callable, Dict, List, Optional
+from pathlib import Path
+from typing import Any, Callable, Dict, List, Optional, Union
 
 from claude_monitor.core.plans import DEFAULT_TOKEN_LIMIT, get_token_limit
 from claude_monitor.error_handling import report_error
@@ -17,7 +18,9 @@ class MonitoringOrchestrator:
     """Orchestrates monitoring components following SRP."""
 
     def __init__(
-        self, update_interval: int = 10, data_path: Optional[str] = None
+        self,
+        update_interval: int = 10,
+        data_path: Optional[Union[str, Path, List[str]]] = None,
     ) -> None:
         """Initialize orchestrator with components.
 

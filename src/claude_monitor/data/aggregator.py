@@ -8,7 +8,8 @@ import logging
 from collections import defaultdict
 from dataclasses import dataclass, field
 from datetime import datetime, timedelta
-from typing import Any, Callable, Dict, List, Optional
+from pathlib import Path
+from typing import Any, Callable, Dict, List, Optional, Sequence, Union
 
 from claude_monitor.core.models import SessionBlock, UsageEntry, normalize_model_name
 from claude_monitor.utils.time_utils import TimezoneHandler
@@ -94,7 +95,7 @@ class UsageAggregator:
 
     def __init__(
         self,
-        data_path: str,
+        data_path: Union[str, Path, Sequence[Union[str, Path]]],
         aggregation_mode: str = "daily",
         timezone: str = "UTC",
         reset_hour: Optional[int] = None,

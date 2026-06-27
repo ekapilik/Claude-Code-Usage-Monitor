@@ -51,6 +51,7 @@ from claude_monitor.terminal.manager import (
 from claude_monitor.terminal.themes import get_themed_console, print_themed
 from claude_monitor.ui.display_controller import DisplayController
 from claude_monitor.ui.table_views import TableViewsController
+from claude_monitor.utils.wsl import WSLDetector
 
 # Type aliases for CLI callbacks
 DataUpdateCallback = Callable[[Dict[str, Any]], None]
@@ -70,6 +71,26 @@ def _env_claude_paths() -> List[str]:
     ]
 
 
+_WSL_DETECTOR: Optional[WSLDetector] = None
+
+
+def _get_wsl_detector() -> WSLDetector:
+    global _WSL_DETECTOR
+    if _WSL_DETECTOR is None:
+        _WSL_DETECTOR = WSLDetector()
+    return _WSL_DETECTOR
+
+
+def _wsl_claude_paths() -> List[str]:
+    return _get_wsl_detector().data_paths()
+
+
+def _candidate_claude_paths(custom_paths: Optional[List[str]] = None) -> List[str]:
+    if custom_paths:
+        return [str(path) for path in custom_paths]
+    return _env_claude_paths() + get_standard_claude_paths() + _wsl_claude_paths()
+
+
 def discover_claude_data_paths(custom_paths: Optional[List[str]] = None) -> List[Path]:
     """Discover all available Claude data directories.
 
@@ -82,11 +103,7 @@ def discover_claude_data_paths(custom_paths: Optional[List[str]] = None) -> List
     Returns:
         List of Path objects for existing Claude data directories
     """
-    paths_to_check: List[str] = (
-        [str(p) for p in custom_paths]
-        if custom_paths
-        else _env_claude_paths() + get_standard_claude_paths()
-    )
+    paths_to_check = _candidate_claude_paths(custom_paths)
 
     discovered_paths: List[Path] = []
     seen: set[Path] = set()
@@ -164,19 +181,21 @@ def _run_once(args: argparse.Namespace) -> int:
     Returns an automation-friendly exit code: 0 ok, 10 near limit, 11 limit hit,
     20 no active session, 30 no data / config error.
     """
-    data_paths = discover_claude_data_paths()
+    configured_paths = getattr(args, "data_paths", [])
+    data_paths = discover_claude_data_paths(configured_paths)
     if not data_paths:
         print(
-            _no_data_diagnostic(_env_claude_paths() + get_standard_claude_paths()),
+            _no_data_diagnostic(_candidate_claude_paths(configured_paths)),
             file=sys.stderr,
         )
         return 30
 
-    data_path = data_paths[0]
-    args.data_path = str(data_path)
+    data_path_values = [str(path) for path in data_paths]
+    args.data_paths = data_path_values
+    args.data_path = data_path_values[0]
 
     orchestrator = MonitoringOrchestrator(
-        update_interval=getattr(args, "refresh_rate", 10), data_path=str(data_path)
+        update_interval=getattr(args, "refresh_rate", 10), data_path=data_path_values
     )
     orchestrator.set_args(args)
     try:
@@ -316,24 +335,28 @@ def _run_monitoring(args: argparse.Namespace) -> None:
     live_display_active: bool = False
 
     try:
-        data_paths: List[Path] = discover_claude_data_paths()
+        configured_paths = getattr(args, "data_paths", [])
+        data_paths: List[Path] = discover_claude_data_paths(configured_paths)
         if not data_paths:
             print_themed(
-                _no_data_diagnostic(_env_claude_paths() + get_standard_claude_paths()),
+                _no_data_diagnostic(_candidate_claude_paths(configured_paths)),
                 style="error",
             )
             return
 
-        data_path: Path = data_paths[0]
+        data_path_values = [str(path) for path in data_paths]
+        args.data_paths = data_path_values
+        args.data_path = data_path_values[0]
+        data_path: Union[Path, List[str]] = data_path_values
         logger = logging.getLogger(__name__)
-        logger.info(f"Using data path: {data_path}")
+        logger.info(f"Using data paths: {data_path_values}")
 
         # Handle different view modes
         if view_mode in ["daily", "monthly"]:
             _run_table_view(args, data_path, view_mode, console)
             return
 
-        token_limit: int = _get_initial_token_limit(args, str(data_path))
+        token_limit: int = _get_initial_token_limit(args, data_path)
 
         display_controller = DisplayController()
         display_controller.live_manager._console = console
@@ -366,7 +389,7 @@ def _run_monitoring(args: argparse.Namespace) -> None:
                 update_interval=(
                     args.refresh_rate if hasattr(args, "refresh_rate") else 10
                 ),
-                data_path=str(data_path),
+                data_path=data_path_values,
             )
             orchestrator.set_args(args)
 
@@ -486,7 +509,7 @@ def _run_monitoring(args: argparse.Namespace) -> None:
 
 
 def _get_initial_token_limit(
-    args: argparse.Namespace, data_path: Union[str, Path]
+    args: argparse.Namespace, data_path: Union[str, Path, List[str]]
 ) -> int:
     """Get initial token limit for the plan."""
     logger = logging.getLogger(__name__)
@@ -512,7 +535,7 @@ def _get_initial_token_limit(
                 hours_back=96 * 2,
                 quick_start=False,
                 use_cache=False,
-                data_path=str(data_path),
+                data_path=data_path,
                 filter_models=getattr(args, "filter_models", "all"),
             )
 
@@ -590,7 +613,10 @@ def validate_cli_environment() -> Optional[str]:
 
 
 def _run_table_view(
-    args: argparse.Namespace, data_path: Path, view_mode: str, console: Console
+    args: argparse.Namespace,
+    data_path: Union[Path, List[str]],
+    view_mode: str,
+    console: Console,
 ) -> None:
     """Run table view mode (daily/monthly)."""
     logger = logging.getLogger(__name__)
@@ -598,7 +624,7 @@ def _run_table_view(
     try:
         # Create aggregator with appropriate mode
         aggregator = UsageAggregator(
-            data_path=str(data_path),
+            data_path=data_path,
             aggregation_mode=view_mode,
             timezone=args.timezone,
             reset_hour=getattr(args, "reset_hour", None),

@@ -2,7 +2,8 @@
 
 import logging
 import time
-from typing import Any, Dict, Optional
+from pathlib import Path
+from typing import Any, Dict, List, Optional, Union
 
 from claude_monitor.data.analysis import analyze_usage
 from claude_monitor.error_handling import report_error
@@ -17,7 +18,7 @@ class DataManager:
         self,
         cache_ttl: int = 30,
         hours_back: int = 192,
-        data_path: Optional[str] = None,
+        data_path: Optional[Union[str, Path, List[str]]] = None,
         filter_models: str = "all",
     ) -> None:
         """Initialize data manager with cache and fetch settings.
@@ -33,7 +34,7 @@ class DataManager:
         self._cache_timestamp: Optional[float] = None
 
         self.hours_back: int = hours_back
-        self.data_path: Optional[str] = data_path
+        self.data_path: Optional[Union[str, Path, List[str]]] = data_path
         self.filter_models: str = filter_models
         self._last_error: Optional[str] = None
         self._last_successful_fetch: Optional[float] = None
