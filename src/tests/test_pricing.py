@@ -108,6 +108,8 @@ class TestPricingCalculator:
             ("claude-sonnet-4-20250514", 3.0, 15.0),
             # Legacy versions priced differently from the current family rate
             ("claude-opus-4-20250514", 15.0, 75.0),  # Opus 4.0
+            ("claude-opus-4-1", 15.0, 75.0),  # Opus 4.1 alias (codex P1)
+            ("claude-opus-4-0", 15.0, 75.0),  # Opus 4.0 alias
             ("claude-3-opus", 15.0, 75.0),
             ("claude-3-haiku", 0.25, 1.25),
             ("claude-3-5-haiku", 0.8, 4.0),

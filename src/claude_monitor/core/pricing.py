@@ -76,6 +76,18 @@ class PricingCalculator:
             "cache_creation": 18.75,
             "cache_read": 1.5,
         },
+        "claude-opus-4-1": {
+            "input": 15.0,
+            "output": 75.0,
+            "cache_creation": 18.75,
+            "cache_read": 1.5,
+        },
+        "claude-opus-4-0": {
+            "input": 15.0,
+            "output": 75.0,
+            "cache_creation": 18.75,
+            "cache_read": 1.5,
+        },
         # Haiku 3 / 3.5 were cheaper than Haiku 4.5
         "claude-3-haiku": {
             "input": 0.25,

@@ -699,6 +699,51 @@ class TestSettings:
         assert namespace.no_header is True
         assert namespace.no_emoji is True
 
+    @patch("claude_monitor.core.settings.Settings._get_system_timezone")
+    @patch("claude_monitor.core.settings.Settings._get_system_time_format")
+    def test_cli_plan_equals_form_overrides_saved(
+        self, mock_time_format: Mock, mock_timezone: Mock
+    ) -> None:
+        """--plan=pro (equals form) must beat a saved plan, like --plan pro (codex P1)."""
+        mock_timezone.return_value = "UTC"
+        mock_time_format.return_value = "24h"
+
+        with patch("claude_monitor.core.settings.LastUsedParams") as MockLastUsed:
+            mock_instance = Mock()
+            mock_instance.load.return_value = {"plan": "max5"}
+            MockLastUsed.return_value = mock_instance
+
+            settings = Settings.load_with_last_used(["--plan=pro"])
+
+            assert settings.plan == "pro"
+
+    @patch("claude_monitor.core.settings.Settings._get_system_timezone")
+    @patch("claude_monitor.core.settings.Settings._get_system_time_format")
+    @patch("claude_monitor.terminal.themes.BackgroundDetector")
+    def test_auto_theme_persisted_as_auto_not_resolved(
+        self, MockDetector: Mock, mock_time_format: Mock, mock_timezone: Mock
+    ) -> None:
+        """Auto theme resolves for display but persists 'auto' so it keeps re-detecting (codex P2)."""
+        mock_timezone.return_value = "UTC"
+        mock_time_format.return_value = "24h"
+
+        from claude_monitor.terminal.themes import BackgroundType
+
+        detector = Mock()
+        detector.detect_background.return_value = BackgroundType.DARK
+        MockDetector.return_value = detector
+
+        with patch("claude_monitor.core.settings.LastUsedParams") as MockLastUsed:
+            mock_instance = Mock()
+            mock_instance.load.return_value = {}
+            MockLastUsed.return_value = mock_instance
+
+            settings = Settings.load_with_last_used([])
+
+            assert settings.theme == "dark"  # resolved for this run's display
+            persisted = mock_instance.save.call_args[0][0]
+            assert persisted.theme == "auto"  # re-detects next launch
+
 
 class TestSettingsIntegration:
     """Integration tests for Settings class."""

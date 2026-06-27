@@ -157,7 +157,8 @@ def _run_monitoring(args: argparse.Namespace) -> None:
         data_paths: List[Path] = discover_claude_data_paths()
         if not data_paths:
             print_themed(
-                _no_data_diagnostic(get_standard_claude_paths()), style="error"
+                _no_data_diagnostic(_env_claude_paths() + get_standard_claude_paths()),
+                style="error",
             )
             return
 

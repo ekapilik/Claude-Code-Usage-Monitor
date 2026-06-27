@@ -296,7 +296,8 @@ class Settings(BaseSettings):
             if argv:
                 for _i, arg in enumerate(argv):
                     if arg.startswith("--"):
-                        field_name = arg[2:].replace("-", "_")
+                        # Handle both "--plan pro" and "--plan=pro" forms.
+                        field_name = arg[2:].split("=", 1)[0].replace("-", "_")
                         if field_name in cls.model_fields:
                             cli_provided_fields.add(field_name)
 
@@ -321,7 +322,8 @@ class Settings(BaseSettings):
         if settings.debug:
             settings.log_level = "DEBUG"
 
-        if settings.theme == "auto":
+        theme_was_auto = settings.theme == "auto"
+        if theme_was_auto:
             from claude_monitor.terminal.themes import (
                 BackgroundDetector,
                 BackgroundType,
@@ -339,7 +341,14 @@ class Settings(BaseSettings):
 
         if not clear_config:
             last_used = LastUsedParams()
-            last_used.save(settings)
+            # Persist the user's "auto" intent (not the resolved light/dark) so
+            # background auto-detection keeps running on the next launch.
+            to_persist = (
+                settings.model_copy(update={"theme": "auto"})
+                if theme_was_auto
+                else settings
+            )
+            last_used.save(to_persist)
 
         return settings
 
