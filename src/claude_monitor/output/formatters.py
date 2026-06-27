@@ -25,9 +25,14 @@ def _abbrev(n: float) -> str:
     return str(int(n))
 
 
+def _compact_pace_label(label: Any) -> str:
+    return str(label).strip().lower().replace(" ", "-")
+
+
 def format_compact(snapshot: dict) -> str:
     """One glanceable line from the snapshot: usage, burn rate, reset, cost (#65)."""
-    five = snapshot.get("limits", {}).get("five_hour", {})
+    limits = snapshot.get("limits", {})
+    five = limits.get("five_hour", {})
     local = snapshot.get("local", {})
 
     pct = five.get("used_percentage")
@@ -49,7 +54,22 @@ def format_compact(snapshot: dict) -> str:
     reset_s = resets_at[11:16] if resets_at else "--:--"  # HH:MM from ISO
 
     cost = local.get("cost_usd") or 0.0
-    return f"claude {pct_s}{used_s} | {bpm_s} | reset {reset_s} | ${cost:.2f}"
+    parts = [f"claude {pct_s}{used_s}", bpm_s, f"reset {reset_s}"]
+
+    seven = limits.get("seven_day") or {}
+    if (
+        seven.get("confidence") == "official"
+        and seven.get("used_percentage") is not None
+    ):
+        parts.append(f"7d {seven['used_percentage']:.1f}%")
+
+    pace = snapshot.get("pace") or {}
+    pace_label = _compact_pace_label(pace.get("label", ""))
+    if pace_label and pace_label != "unknown":
+        parts.append(f"pace={pace_label}")
+
+    parts.append(f"${cost:.2f}")
+    return " | ".join(parts)
 
 
 class _MissingTitleValue:

@@ -1,6 +1,7 @@
 """Tests for the one-shot usage snapshot builder (#126)."""
 
 import argparse
+from datetime import datetime, timezone
 from typing import Any
 
 from claude_monitor.output.snapshots import SNAPSHOT_SCHEMA_VERSION, build_snapshot
@@ -61,6 +62,7 @@ def test_build_snapshot_active_block_shape() -> None:
         "limits",
         "local",
         "local_history",
+        "pace",
         "forecast",
         "status",
     ):
@@ -98,6 +100,14 @@ def test_seven_day_deferred_null_unknown() -> None:
     assert seven["confidence"] == "unknown"
 
 
+def test_local_history_is_labeled_history_not_weekly_quota() -> None:
+    snap = build_snapshot(_data(), _args(), token_limit=19000)
+
+    assert snap["local_history"]["label"] == "local_history"
+    assert snap["local_history"]["confidence"] == "local_estimate"
+    assert snap["limits"]["seven_day"]["confidence"] == "unknown"
+
+
 def test_no_active_block_status_20() -> None:
     snap = build_snapshot(_data(active=False), _args(), token_limit=19000)
     assert snap["status"]["code"] == 20
@@ -109,6 +119,58 @@ def test_forecast_token_based_not_cost() -> None:
     fc = snap["forecast"]
     assert fc["tokens_remaining"] == 6992  # 19000 - 12008
     assert fc["basis"] == "input_output_tokens_per_minute"
+
+
+def test_forecast_has_today_display_context() -> None:
+    snap = build_snapshot(
+        _data(),
+        _args(),
+        token_limit=19000,
+        now=datetime(2026, 6, 27, 12, 0, tzinfo=timezone.utc),
+    )
+
+    assert snap["forecast"]["display"] == "Today 12:58 (estimated)"
+    assert snap["forecast"]["confidence"] == "local_estimate"
+
+
+def test_forecast_has_tomorrow_display_context() -> None:
+    snap = build_snapshot(
+        _data(totalTokens=1000, durationMinutes=60),
+        _args(),
+        token_limit=19000,
+        now=datetime(2026, 6, 27, 12, 0, tzinfo=timezone.utc),
+    )
+
+    assert snap["forecast"]["display"] == "Tomorrow 06:00 (estimated)"
+
+
+def test_forecast_freezes_after_limit_hit() -> None:
+    snap = build_snapshot(
+        _data(totalTokens=20000),
+        _args(),
+        token_limit=19000,
+        now=datetime(2026, 6, 27, 12, 0, tzinfo=timezone.utc),
+    )
+
+    assert snap["status"]["label"] == "limit_hit"
+    assert snap["forecast"]["tokens_remaining"] == 0
+    assert snap["forecast"]["minutes_remaining"] == 0
+    assert snap["forecast"]["predicted_tokens_exhausted_at"] is None
+    assert snap["forecast"]["predicted_tokens_exhausted_epoch"] is None
+    assert snap["forecast"]["display"] == "limit hit"
+
+
+def test_local_pace_fallback_is_labeled_estimate() -> None:
+    snap = build_snapshot(
+        _data(totalTokens=4750),
+        _args(),
+        token_limit=19000,
+        now=datetime(2026, 6, 27, 14, 30, tzinfo=timezone.utc),
+    )
+
+    assert snap["pace"]["label"] == "speed up"
+    assert snap["pace"]["confidence"] == "local_estimate"
+    assert snap["pace"]["source"]["kind"] == "claude_code_jsonl"
 
 
 def test_over_100_reports_real_pct_and_limit_hit() -> None:

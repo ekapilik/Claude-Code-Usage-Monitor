@@ -583,6 +583,23 @@ class TestDisplayControllerEdgeCases:
         assert "reset_time_str" in result
         assert "current_time_str" in result
 
+    def test_format_display_times_adds_prediction_date_context(
+        self, controller, sample_args
+    ):
+        """Predicted exhaustion should not render as a bare clock time (#128)."""
+        sample_args.timezone = "UTC"
+        sample_args.time_format = "24h"
+
+        current_time = datetime(2026, 6, 27, 12, 0, tzinfo=timezone.utc)
+        predicted_end = current_time + timedelta(hours=2)
+        reset_time = current_time + timedelta(hours=5)
+
+        result = controller._format_display_times(
+            sample_args, current_time, predicted_end, reset_time
+        )
+
+        assert result["predicted_end_str"] == "Today 14:00 (estimated)"
+
     def test_calculate_model_distribution_invalid_stats(self, controller):
         """Test model distribution with invalid stats format."""
         invalid_stats = {

@@ -1,6 +1,7 @@
 """Trust-keystone integration: official statusline limits override local estimates."""
 
 import argparse
+from datetime import datetime, timezone
 from typing import Optional
 
 from claude_monitor.output.snapshots import build_snapshot
@@ -60,6 +61,21 @@ def test_official_five_hour_overrides_local() -> None:
     assert five["resets_at"].startswith("2026-06-27T17:00")  # ISO from the epoch
     # Headline confidence reflects the official limit.
     assert snap["confidence"] == "official"
+
+
+def test_official_pace_uses_official_reset() -> None:
+    snap = build_snapshot(
+        _data(used=12000),
+        _args(),
+        token_limit=19000,
+        official=_official(five_pct=75.0, five_reset=1782579600),
+        now=datetime(2026, 6, 27, 14, 30, tzinfo=timezone.utc),
+    )
+
+    assert snap["pace"]["label"] == "slow down"
+    assert snap["pace"]["confidence"] == "official"
+    assert snap["pace"]["source"]["kind"] == "statusline"
+    assert snap["pace"]["used_percentage"] == 75.0
 
 
 def test_official_drives_status_code_not_local() -> None:

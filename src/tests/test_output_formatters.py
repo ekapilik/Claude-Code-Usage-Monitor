@@ -109,3 +109,35 @@ def test_format_compact_official_omits_token_detail() -> None:
     assert "73.5%" in line
     assert "(" not in line  # no token parenthetical
     assert "claude 73.5% |" in line
+
+
+def test_format_compact_includes_pace_token() -> None:
+    snap = {
+        "limits": {"five_hour": {"used_percentage": 75.0}},
+        "local": {},
+        "pace": {"label": "slow down", "confidence": "official"},
+    }
+
+    line = format_compact(snap)
+
+    assert "pace=slow-down" in line
+
+
+def test_format_compact_weekly_renders_only_official_seven_day() -> None:
+    local_only = {
+        "limits": {
+            "five_hour": {"used_percentage": 60.0},
+            "seven_day": {"used_percentage": None, "confidence": "unknown"},
+        },
+        "local": {},
+    }
+    official_weekly = {
+        "limits": {
+            "five_hour": {"used_percentage": 60.0},
+            "seven_day": {"used_percentage": 18.0, "confidence": "official"},
+        },
+        "local": {},
+    }
+
+    assert "7d" not in format_compact(local_only)
+    assert "7d 18.0%" in format_compact(official_weekly)

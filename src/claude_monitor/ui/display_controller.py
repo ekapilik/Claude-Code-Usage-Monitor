@@ -32,6 +32,21 @@ from claude_monitor.utils.time_utils import (
 )
 
 
+def _prediction_time_label(
+    predicted_end: datetime, current_time: datetime, clock_text: str
+) -> str:
+    """Add day context so a prediction is never just a bare clock."""
+    predicted_day = predicted_end.date()
+    current_day = current_time.date()
+    if predicted_day == current_day:
+        prefix = "Today"
+    elif predicted_day == (current_day + timedelta(days=1)):
+        prefix = "Tomorrow"
+    else:
+        prefix = predicted_end.strftime("%Y-%m-%d")
+    return f"{prefix} {clock_text} (estimated)"
+
+
 class DisplayController:
     """Main controller for coordinating UI display operations."""
 
@@ -169,15 +184,6 @@ class DisplayController:
         )
         reset_time_local = tz_handler.convert_to_timezone(reset_time, timezone_to_use)
 
-        # Format times
-        time_format = get_time_format_preference(args)
-        predicted_end_str = format_display_time(
-            predicted_end_local, time_format, include_seconds=False
-        )
-        reset_time_str = format_display_time(
-            reset_time_local, time_format, include_seconds=False
-        )
-
         # Current time display
         try:
             display_tz = pytz.timezone(args.timezone)
@@ -185,6 +191,19 @@ class DisplayController:
             display_tz = pytz.timezone("Europe/Warsaw")
 
         current_time_display = current_time.astimezone(display_tz)
+
+        # Format times
+        time_format = get_time_format_preference(args)
+        predicted_end_clock = format_display_time(
+            predicted_end_local, time_format, include_seconds=False
+        )
+        predicted_end_str = _prediction_time_label(
+            predicted_end_local, current_time_display, predicted_end_clock
+        )
+        reset_time_str = format_display_time(
+            reset_time_local, time_format, include_seconds=False
+        )
+
         current_time_str = format_display_time(
             current_time_display, time_format, include_seconds=True
         )

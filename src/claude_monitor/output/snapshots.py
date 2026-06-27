@@ -23,6 +23,16 @@ _STATUSLINE = "statusline"
 _LOCAL = "local_estimate"
 _OFFICIAL = "official"
 _UNKNOWN = "unknown"
+_PACE_TOLERANCE_POINTS = 10.0
+_FIVE_HOUR_SECONDS = 5 * 60 * 60
+
+
+def _coerce_now(now: Optional[datetime]) -> datetime:
+    if now is None:
+        return datetime.now(timezone.utc)
+    if now.tzinfo is None:
+        return now.replace(tzinfo=timezone.utc)
+    return now.astimezone(timezone.utc)
 
 
 def _official_block(window: Dict[str, Any]) -> Dict[str, Any]:
@@ -33,7 +43,9 @@ def _official_block(window: Dict[str, Any]) -> Dict[str, Any]:
     """
     epoch = window.get("resets_at_epoch")
     resets_at = (
-        datetime.fromtimestamp(epoch, timezone.utc).isoformat() if epoch else None
+        datetime.fromtimestamp(epoch, timezone.utc).isoformat()
+        if epoch is not None
+        else None
     )
     return {
         "used_percentage": window.get("used_percentage"),
@@ -75,6 +87,69 @@ def _epoch(iso: Optional[str]) -> Optional[int]:
         return int(datetime.fromisoformat(iso).timestamp())
     except (ValueError, TypeError):
         return None
+
+
+def _format_forecast_display(
+    exhausted_at: Optional[datetime], now: datetime, confidence: str
+) -> Optional[str]:
+    if exhausted_at is None:
+        return None
+
+    local_day = exhausted_at.date()
+    current_day = now.date()
+    if local_day == current_day:
+        prefix = "Today"
+    elif local_day == (current_day + timedelta(days=1)):
+        prefix = "Tomorrow"
+    else:
+        prefix = exhausted_at.strftime("%Y-%m-%d")
+
+    suffix = " (estimated)" if confidence == _LOCAL else ""
+    return f"{prefix} {exhausted_at:%H:%M}{suffix}"
+
+
+def _pace_from_window(window: Dict[str, Any], now: datetime) -> Dict[str, Any]:
+    used_pct = window.get("used_percentage")
+    reset_epoch = window.get("resets_at_epoch")
+    if reset_epoch is None:
+        reset_epoch = _epoch(window.get("resets_at"))
+    source = window.get("source") or {"kind": _KIND}
+    confidence = window.get("confidence") or _UNKNOWN
+
+    if used_pct is None or reset_epoch is None:
+        return {
+            "label": "unknown",
+            "used_percentage": used_pct,
+            "elapsed_percentage": None,
+            "resets_at": window.get("resets_at"),
+            "resets_at_epoch": reset_epoch,
+            "source": source,
+            "confidence": _UNKNOWN,
+        }
+
+    reset_at = datetime.fromtimestamp(reset_epoch, timezone.utc)
+    window_start = reset_at - timedelta(seconds=_FIVE_HOUR_SECONDS)
+    elapsed_seconds = (now - window_start).total_seconds()
+    elapsed_ratio = min(1.0, max(0.0, elapsed_seconds / _FIVE_HOUR_SECONDS))
+    elapsed_pct = round(elapsed_ratio * 100, 1)
+    delta = float(used_pct) - elapsed_pct
+
+    if delta > _PACE_TOLERANCE_POINTS:
+        label = "slow down"
+    elif delta < -_PACE_TOLERANCE_POINTS:
+        label = "speed up"
+    else:
+        label = "on track"
+
+    return {
+        "label": label,
+        "used_percentage": used_pct,
+        "elapsed_percentage": elapsed_pct,
+        "resets_at": window.get("resets_at"),
+        "resets_at_epoch": reset_epoch,
+        "source": source,
+        "confidence": confidence,
+    }
 
 
 def _status(active: Optional[dict], used_pct: Optional[float]) -> tuple[int, str]:
@@ -125,6 +200,7 @@ def build_snapshot(
     args: Any,
     token_limit: int,
     official: Optional[dict] = None,
+    now: Optional[datetime] = None,
 ) -> dict:
     """Build the one-shot snapshot dict from a single analysis payload.
 
@@ -143,6 +219,7 @@ def build_snapshot(
     """
     blocks = (data or {}).get("blocks", []) or []
     active = next((b for b in blocks if b.get("isActive")), None)
+    current_time = _coerce_now(now)
 
     plan = getattr(args, "plan", "custom")
     data_path = getattr(args, "data_path", None)
@@ -197,8 +274,10 @@ def build_snapshot(
             else None
         )
         exhausted_at = exhausted_epoch = None
+        exhausted_dt = None
         if minutes_remaining is not None:
-            dt = datetime.now(timezone.utc) + timedelta(minutes=minutes_remaining)
+            dt = current_time + timedelta(minutes=minutes_remaining)
+            exhausted_dt = dt
             exhausted_at = dt.isoformat()
             exhausted_epoch = int(dt.timestamp())
         forecast = {
@@ -208,6 +287,7 @@ def build_snapshot(
             "minutes_remaining": minutes_remaining,
             "basis": "input_output_tokens_per_minute",
             "confidence": _LOCAL,
+            "display": _format_forecast_display(exhausted_dt, current_time, _LOCAL),
         }
     else:
         raw_pct = None
@@ -244,6 +324,7 @@ def build_snapshot(
             "minutes_remaining": None,
             "basis": "burn_rate_tokens_per_minute",
             "confidence": _UNKNOWN,
+            "display": None,
         }
 
     real_blocks = [b for b in blocks if not b.get("isGap")]
@@ -291,10 +372,21 @@ def build_snapshot(
         snapshot_stale = True
 
     code, label = _status(active, status_pct)
+    if label == "limit_hit":
+        forecast = {
+            **forecast,
+            "predicted_tokens_exhausted_at": None,
+            "predicted_tokens_exhausted_epoch": None,
+            "tokens_remaining": 0,
+            "minutes_remaining": 0,
+            "display": "limit hit",
+        }
+
+    pace = _pace_from_window(five_hour, current_time)
 
     return {
         "schema_version": SNAPSHOT_SCHEMA_VERSION,
-        "generated_at": datetime.now(timezone.utc).isoformat(),
+        "generated_at": current_time.isoformat(),
         "tool": {"name": "claude-monitor", "version": __version__},
         "source": {
             "kind": _KIND,
@@ -310,11 +402,13 @@ def build_snapshot(
         },
         "local": local,
         "local_history": {
+            "label": "local_history",
             "total_tokens": hist_tokens,
             "total_cost_usd": hist_cost,
             "source": {"kind": _KIND},
             "confidence": _LOCAL,
         },
+        "pace": pace,
         "forecast": forecast,
         "status": {"code": code, "label": label},
     }
