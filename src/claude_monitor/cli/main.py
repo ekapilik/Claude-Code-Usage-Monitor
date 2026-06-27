@@ -25,6 +25,8 @@ from claude_monitor.core.plans import Plans, PlanType, get_token_limit
 from claude_monitor.core.settings import Settings
 from claude_monitor.data.aggregator import UsageAggregator
 from claude_monitor.data.analysis import analyze_usage
+from claude_monitor.data.reports import build_warehouse_report, format_report_csv
+from claude_monitor.data.warehouse import UsageWarehouse, default_warehouse_path
 from claude_monitor.error_handling import report_error
 from claude_monitor.monitoring.orchestrator import MonitoringOrchestrator
 from claude_monitor.output import (
@@ -56,6 +58,7 @@ from claude_monitor.utils.wsl import WSLDetector
 # Type aliases for CLI callbacks
 DataUpdateCallback = Callable[[Dict[str, Any]], None]
 SessionChangeCallback = Callable[[str, str, Optional[Dict[str, Any]]], None]
+WAREHOUSE_REPORT_VIEWS = {"entries", "sessions", "burn-rate"}
 
 
 def get_standard_claude_paths() -> List[str]:
@@ -223,6 +226,13 @@ def _run_once(args: argparse.Namespace) -> int:
         print(format_json(snapshot))
     elif output == "text":
         print(format_text(snapshot))
+    elif output == "csv":
+        print(
+            "CSV output is available for warehouse report views "
+            "(--view entries|sessions|burn-rate).",
+            file=sys.stderr,
+        )
+        return 30
     elif getattr(args, "compact", False):
         print(format_compact(snapshot))
     else:
@@ -305,6 +315,9 @@ def main(argv: Optional[List[str]] = None) -> int:
 
         args = settings.to_namespace()
 
+        if settings.view in WAREHOUSE_REPORT_VIEWS:
+            return _run_warehouse_report(args)
+
         if settings.once:
             return _run_once(args)
 
@@ -320,6 +333,38 @@ def main(argv: Optional[List[str]] = None) -> int:
         logger.error(f"Monitor failed: {e}", exc_info=True)
         traceback.print_exc()
         return 30 if once_mode else 1
+
+
+def _run_warehouse_report(args: argparse.Namespace) -> int:
+    """Run a warehouse-backed report/export view."""
+    output = getattr(args, "output", "json")
+    if output not in {"json", "csv"}:
+        print(
+            "Warehouse report views require --output json or --output csv.",
+            file=sys.stderr,
+        )
+        return 30
+
+    warehouse_path = (
+        Path(args.warehouse_file)
+        if getattr(args, "warehouse_file", None)
+        else default_warehouse_path()
+    )
+    try:
+        report = build_warehouse_report(
+            UsageWarehouse(warehouse_path),
+            getattr(args, "view", "entries"),
+            plan=getattr(args, "plan", "custom"),
+        )
+    except (OSError, ValueError, TypeError) as e:
+        print(f"Failed to build warehouse report: {e}", file=sys.stderr)
+        return 30
+
+    if output == "csv":
+        print(format_report_csv(report), end="")
+    else:
+        print(format_json(report))
+    return 0
 
 
 def _run_monitoring(args: argparse.Namespace) -> None:

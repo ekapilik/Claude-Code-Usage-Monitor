@@ -130,6 +130,62 @@ class TestAnalyzeUsage:
     @patch("claude_monitor.data.analysis.load_usage_entries")
     @patch("claude_monitor.data.analysis.SessionAnalyzer")
     @patch("claude_monitor.data.analysis.BurnRateCalculator")
+    def test_analyze_usage_persists_limit_events_with_warehouse(
+        self,
+        mock_calc_class: Mock,
+        mock_analyzer_class: Mock,
+        mock_load: Mock,
+        mock_warehouse_class: Mock,
+        tmp_path: Path,
+    ) -> None:
+        """Warehouse reports can count sessions that ended by detected limits."""
+        sample_entry = UsageEntry(
+            timestamp=datetime(2024, 1, 1, 12, 0, tzinfo=timezone.utc),
+            input_tokens=100,
+            output_tokens=50,
+            cost_usd=0.001,
+            model="claude-3-haiku",
+            project="/workspace/app",
+        )
+        sample_block = SessionBlock(
+            id="block_1",
+            start_time=datetime(2024, 1, 1, 12, 0, tzinfo=timezone.utc),
+            end_time=datetime(2024, 1, 1, 17, 0, tzinfo=timezone.utc),
+            token_counts=TokenCounts(input_tokens=100, output_tokens=50),
+            cost_usd=0.001,
+            entries=[sample_entry],
+        )
+        limit_event = {
+            "type": "system_limit",
+            "timestamp": datetime(2024, 1, 1, 13, 0, tzinfo=timezone.utc),
+            "content": "limit reached",
+            "reset_time": datetime(2024, 1, 1, 17, 0, tzinfo=timezone.utc),
+            "source": {"kind": "claude_code_jsonl", "account": "profile-a"},
+        }
+
+        mock_load.return_value = ([sample_entry], [{"raw": "data"}])
+        mock_analyzer = Mock()
+        mock_analyzer.transform_to_blocks.return_value = [sample_block]
+        mock_analyzer.detect_limits.return_value = [limit_event]
+        mock_analyzer_class.return_value = mock_analyzer
+        mock_calc_class.return_value = Mock()
+
+        analyze_usage(
+            hours_back=24,
+            use_cache=False,
+            write_warehouse=True,
+            warehouse_file=tmp_path / "usage.json",
+            warehouse_retention_days=30,
+        )
+
+        mock_warehouse = mock_warehouse_class.return_value
+        mock_warehouse.upsert_entries.assert_called_once_with([sample_entry])
+        mock_warehouse.upsert_limit_events.assert_called_once_with([limit_event])
+
+    @patch("claude_monitor.data.analysis.UsageWarehouse")
+    @patch("claude_monitor.data.analysis.load_usage_entries")
+    @patch("claude_monitor.data.analysis.SessionAnalyzer")
+    @patch("claude_monitor.data.analysis.BurnRateCalculator")
     def test_analyze_usage_does_not_touch_warehouse_by_default(
         self,
         mock_calc_class: Mock,

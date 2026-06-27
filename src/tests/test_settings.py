@@ -764,6 +764,21 @@ class TestSettings:
     def test_output_lowercases_value(self) -> None:
         assert Settings(output="JSON", _cli_parse_args=[]).output == "json"
 
+    def test_report_views_and_csv_output_reach_namespace(self) -> None:
+        """Warehouse reports add entries/sessions/burn-rate views and CSV output."""
+        for view in ("entries", "sessions", "burn-rate"):
+            settings = Settings(
+                view=view,
+                output="CSV",
+                warehouse_file="/tmp/usage.json",
+                _cli_parse_args=[],
+            )
+            namespace = settings.to_namespace()
+            assert settings.view == view
+            assert namespace.view == view
+            assert settings.output == "csv"
+            assert namespace.output == "csv"
+
     def test_write_state_defaults_and_namespace(self) -> None:
         """--write-state defaults off, --state-file default None; both reach the namespace (#184)."""
         default = Settings(_cli_parse_args=[])

@@ -64,13 +64,6 @@ def analyze_usage(
         include_raw=True,
         filter_models=filter_models,
     )
-    if write_warehouse:
-        warehouse_path = (
-            Path(warehouse_file) if warehouse_file else default_warehouse_path()
-        )
-        UsageWarehouse(
-            warehouse_path, retention_days=warehouse_retention_days
-        ).upsert_entries(entries)
     load_time = (datetime.now() - start_time).total_seconds()
     logger.info(f"Data loaded in {load_time:.3f}s")
 
@@ -103,6 +96,17 @@ def analyze_usage(
                 if with_reset:
                     newest = max(with_reset, key=lambda li: li["timestamp"])
                     block.usage_limit_reset_time = newest["reset_time"]
+
+    if write_warehouse:
+        warehouse_path = (
+            Path(warehouse_file) if warehouse_file else default_warehouse_path()
+        )
+        warehouse = UsageWarehouse(
+            warehouse_path, retention_days=warehouse_retention_days
+        )
+        warehouse.upsert_entries(entries)
+        if raw_entries and limit_detections:
+            warehouse.upsert_limit_events(limit_detections)
 
     metadata: Dict[str, Any] = {
         "generated_at": datetime.now(timezone.utc).isoformat(),

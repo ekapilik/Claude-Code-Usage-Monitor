@@ -108,9 +108,13 @@ class Settings(BaseSettings):
         description="Plan type (pro, max5, max20, custom)",
     )
 
-    view: Literal["realtime", "daily", "monthly", "session"] = Field(
+    view: Literal[
+        "realtime", "daily", "monthly", "session", "entries", "sessions", "burn-rate"
+    ] = Field(
         default="realtime",
-        description="View mode (realtime, daily, monthly, session)",
+        description=(
+            "View mode (realtime, daily, monthly, session, entries, sessions, burn-rate)"
+        ),
     )
 
     @staticmethod
@@ -208,9 +212,9 @@ class Settings(BaseSettings):
         description="Single-line compact output (works live and one-shot)",
     )
 
-    output: Literal["rich", "json", "text"] = Field(
+    output: Literal["rich", "json", "text", "csv"] = Field(
         default="rich",
-        description="One-shot output format (rich, json, text)",
+        description="One-shot/report output format (rich, json, text, csv)",
     )
 
     write_state: bool = Field(
@@ -279,7 +283,7 @@ class Settings(BaseSettings):
         """Validate and normalize output format value."""
         if isinstance(v, str):
             v_lower = v.lower()
-            valid_outputs = ["rich", "json", "text"]
+            valid_outputs = ["rich", "json", "text", "csv"]
             if v_lower in valid_outputs:
                 return v_lower
             raise ValueError(
@@ -370,7 +374,15 @@ class Settings(BaseSettings):
         """Validate and normalize view value."""
         if isinstance(v, str):
             v_lower = v.lower()
-            valid_views = ["realtime", "daily", "monthly", "session"]
+            valid_views = [
+                "realtime",
+                "daily",
+                "monthly",
+                "session",
+                "entries",
+                "sessions",
+                "burn-rate",
+            ]
             if v_lower in valid_views:
                 return v_lower
             raise ValueError(

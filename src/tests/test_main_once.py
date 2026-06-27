@@ -97,6 +97,15 @@ def test_once_text_greppable(capsys: pytest.CaptureFixture) -> None:
     assert "status.code=0" in out
 
 
+def test_once_csv_without_report_view_exits_30(
+    capsys: pytest.CaptureFixture,
+) -> None:
+    rc = _run(_args("csv"), _payload())
+    captured = capsys.readouterr()
+    assert rc == 30
+    assert "warehouse report" in captured.err.lower()
+
+
 def test_once_limit_hit_exit_11(capsys: pytest.CaptureFixture) -> None:
     rc = _run(_args("json"), _payload(total=20000))  # >100% of 19000
     capsys.readouterr()
