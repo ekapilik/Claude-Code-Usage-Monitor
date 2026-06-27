@@ -1,6 +1,6 @@
 # Changelog
 
-## [3.1.1] - Unreleased
+## [4.0.0] - Unreleased
 
 ### Bug Fixes
 - **Model distribution shows all families**: `ModelUsageBar` now renders every model family — Sonnet, Opus, Haiku, and an "Other" bucket for anything else — instead of only Sonnet/Opus. Haiku and other models no longer vanish from the usage bar or skew the displayed percentages. (#124, #164)
@@ -249,6 +249,7 @@
 - Proper Ctrl+C handling with cursor restoration
 - Terminal settings restoration on exit
 
+[4.0.0]: https://github.com/Maciek-roboblog/Claude-Code-Usage-Monitor/releases/tag/v4.0.0
 [3.0.0]: https://github.com/Maciek-roboblog/Claude-Code-Usage-Monitor/releases/tag/v3.0.0
 [2.0.0]: https://github.com/Maciek-roboblog/Claude-Code-Usage-Monitor/releases/tag/v2.0.0
 [1.0.19]: https://github.com/Maciek-roboblog/Claude-Code-Usage-Monitor/releases/tag/v1.0.19

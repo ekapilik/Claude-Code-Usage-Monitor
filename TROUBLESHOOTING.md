@@ -1,10 +1,10 @@
-# 🐛 Troubleshooting Guide - Claude Monitor v3.0.0
+# 🐛 Troubleshooting Guide - Claude Monitor v4.0.0
 
-**⚠️ This guide is specifically for Claude Monitor v3.0.0** - If you're using an older version, please upgrade first.
+**⚠️ This guide is specifically for Claude Monitor v4.0.0** - If you're using an older version, please upgrade first.
 
 ## 🚨 Quick Fixes
 
-### Most Common v3.0.0 Issues
+### Most Common v4.0.0 Issues
 
 | Problem | Quick Fix |
 |---------|-----------|
@@ -15,7 +15,7 @@
 | Display issues | Terminal width must be 80+ characters |
 | Theme detection problems | Use `--theme dark` or `--theme light` explicitly |
 
-## 🔧 Installation Issues (v3.0.0)
+## 🔧 Installation Issues (v4.0.0)
 
 ### Package Name Change
 
@@ -25,7 +25,7 @@
 # OLD (deprecated)
 pip install claude-usage-monitor
 
-# NEW (v3.0.0)
+# NEW (v3.0.0+)
 pip install claude-monitor
 uv tool install claude-monitor
 ```
@@ -89,7 +89,7 @@ uv tool install claude-monitor
 
 ### Python Version Requirements
 
-**v3.0.0 requires Python 3.9+**
+**v4.0.0 requires Python 3.9+**
 
 ```bash
 # Check Python version
@@ -562,4 +562,4 @@ claude-monitor --version
 
 ---
 
-**Still having issues?** Don't hesitate to [create an issue](https://github.com/Maciek-roboblog/Claude-Code-Usage-Monitor/issues/new) with the **[v3.0.0]** tag in the title!
+**Still having issues?** Don't hesitate to [create an issue](https://github.com/Maciek-roboblog/Claude-Code-Usage-Monitor/issues/new) with the **[v4.0.0]** tag in the title!

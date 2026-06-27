@@ -11,19 +11,23 @@ from typing import Any, Dict, Optional, Union
 
 
 def get_version() -> str:
-    """Get version from package metadata.
+    """Get version from the local project or installed package metadata.
 
-    This reads the version from the installed package metadata,
-    which is set from pyproject.toml during build/installation.
+    Source checkouts should report the version from ``pyproject.toml`` directly.
+    Installed wheels fall back to package metadata, which is generated from the
+    same project version at build time.
 
     Returns:
         Version string (e.g., "3.0.0")
     """
+    local_version = _get_version_from_pyproject()
+    if local_version != "unknown":
+        return local_version
+
     try:
         return importlib.metadata.version("claude-monitor")
     except importlib.metadata.PackageNotFoundError:
-        # Fallback for development environments where package isn't installed
-        return _get_version_from_pyproject()
+        return "unknown"
 
 
 def _get_version_from_pyproject() -> str:

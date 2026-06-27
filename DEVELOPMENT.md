@@ -1,8 +1,8 @@
 # 🚧 Development Status & Roadmap
 
-Current implementation status and planned features for Claude Code Usage Monitor v3.0.0+.
+Current implementation status and planned features for Claude Code Usage Monitor v4.0.0+.
 
-## 🎯 Current Implementation Status (v3.0.0)
+## 🎯 Current Implementation Status (v4.0.0)
 
 ### ✅ **Fully Implemented & Production Ready**
 
@@ -333,4 +333,4 @@ uv run ruff format .
 
 ---
 
-*Ready to contribute? This v3.0.0 codebase represents a mature, production-ready foundation for the next generation of intelligent Claude monitoring!*
+*Ready to contribute? This v4.0.0 codebase represents a mature, production-ready foundation for the next generation of intelligent Claude monitoring!*

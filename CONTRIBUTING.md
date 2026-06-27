@@ -255,8 +255,8 @@ What actually happened.
 **Environment**
 - OS: [e.g. Ubuntu 20.04, Windows 11, macOS 12]
 - Python version: [e.g. 3.9.7]
-- ccusage version: [run: ccusage --version]
-- Monitor version: [git commit hash]
+- claude-monitor version: [run: claude-monitor --version]
+- Commit hash: [run: git rev-parse --short HEAD]
 
 **Error Output**
 ```
@@ -340,7 +340,7 @@ Help us test on different platforms:
 - **Linux**: Ubuntu, Fedora, Arch, Debian
 - **macOS**: Intel and Apple Silicon Macs
 - **Windows**: Windows 10/11, different Python installations
-- **Python versions**: 3.7, 3.8, 3.9, 3.10, 3.11, 3.12
+- **Python versions**: 3.9, 3.10, 3.11, 3.12, 3.13
 
 ---
 

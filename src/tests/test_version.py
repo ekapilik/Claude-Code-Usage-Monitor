@@ -10,7 +10,13 @@ from claude_monitor._version import _get_version_from_pyproject, get_version
 
 def test_get_version_from_metadata() -> None:
     """Test getting version from package metadata."""
-    with patch("importlib.metadata.version") as mock_version:
+    with (
+        patch(
+            "claude_monitor._version._get_version_from_pyproject",
+            return_value="unknown",
+        ),
+        patch("importlib.metadata.version") as mock_version,
+    ):
         mock_version.return_value = "3.0.0"
         version = get_version()
         assert version == "3.0.0"

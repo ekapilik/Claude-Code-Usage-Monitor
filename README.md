@@ -6,7 +6,7 @@
 [![codecov](https://codecov.io/gh/Maciek-roboblog/Claude-Code-Usage-Monitor/branch/main/graph/badge.svg)](https://codecov.io/gh/Maciek-roboblog/Claude-Code-Usage-Monitor)
 [![Mentioned in Awesome Claude Code](https://awesome.re/mentioned-badge.svg)](https://github.com/hesreallyhim/awesome-claude-code)
 
-A beautiful real-time terminal monitoring tool for Claude AI token usage with advanced analytics, machine learning-based predictions, and Rich UI. Track your token consumption, burn rate, cost analysis, and get intelligent predictions about session limits.
+A privacy-first Claude Usage-Ops companion for Claude Code. It combines a Rich live terminal monitor with official statusline `rate_limits`, machine-readable state/export output, provenance labels, forecasting, and an opt-in local usage warehouse.
 
 ![Claude Token Monitor Screenshot](https://raw.githubusercontent.com/Maciek-roboblog/Claude-Code-Usage-Monitor/main/doc/scnew.png)
 
@@ -48,23 +48,17 @@ A beautiful real-time terminal monitoring tool for Claude AI token usage with ad
 
 ## ✨ Key Features
 
-### 🚀 **v3.0.0 Major Update - Complete Architecture Rewrite**
+### 🚀 **v4.0.0 Major Update - Usage Ops Companion**
 
-- **🔮 ML-based predictions** - P90 percentile calculations and intelligent session limit detection
-- **🔄 Real-time monitoring** - Configurable refresh rates (0.1-20 Hz) with intelligent display updates
-- **📊 Advanced Rich UI** - Beautiful color-coded progress bars, tables, and layouts with WCAG-compliant contrast
-- **🤖 Smart auto-detection** - Automatic plan switching with custom limit discovery
-- **📋 Enhanced plan support** - Updated limits: Pro (44k), Max5 (88k), Max20 (220k), Custom (P90-based)
-- **⚠️ Advanced warning system** - Multi-level alerts with cost and time predictions
-- **💼 Professional Architecture** - Modular design with Single Responsibility Principle (SRP) compliance
-- **🎨 Intelligent theming** - Scientific color schemes with automatic terminal background detection
-- **⏰ Advanced scheduling** - Auto-detected system timezone and time format preferences
-- **📈 Cost analytics** - Model-specific pricing with cache token calculations
-- **🔧 Pydantic validation** - Type-safe configuration with automatic validation
-- **📝 Comprehensive logging** - Optional file logging with configurable levels
-- **🧪 Extensive testing** - 100+ test cases with full coverage
-- **🎯 Error reporting** - Optional Sentry integration for production monitoring
-- **⚡ Performance optimized** - Advanced caching and efficient data processing
+- **🔎 Official-limit trust layer** - `--statusline` captures Claude Code's official `rate_limits`; stale or expired captures fall back to labeled local estimates.
+- **📦 Machine-readable protocol** - `--once`, `--compact`, and `--write-state` all use one versioned snapshot builder with automation exit codes.
+- **🏷️ Provenance labels** - exported and displayed numbers distinguish `official`, `local_estimate`, `experimental`, and `unknown` confidence.
+- **📈 Persistent usage warehouse** - opt-in local history survives Claude's 30-day cleanup with project/model/day dimensions and CSV/JSON reports.
+- **🧭 Forecasting and pace** - reset-aware pace, date-context forecasts, official-only weekly percentages, and limit-hit freeze behavior.
+- **🧩 Multi-source input** - `--data-paths`, `CLAUDE_CONFIG_DIR`, and WSL discovery can scan multiple directories without merging unrelated accounts into one 5-hour window.
+- **🖥️ Rich UI parity** - live Rich output, rich one-shot output, compact output, state files, and exports use the same snapshot contract.
+- **🧰 External companion boundary** - GUIs, trays, provider adapters, and status bars should consume `--write-state` or `--once --output json`.
+- **🧪 Regression coverage** - the non-integration suite now covers the trust layer, state protocol, warehouse, reports, title updates, multi-source paths, and timezone edge cases.
 
 ### 📋 Default Custom Plan
 
@@ -188,15 +182,35 @@ claude-monitor --help
 
 | Parameter | Type | Default | Description |
 |-----------|------|---------|-------------|
-| --plan | string | custom | Plan type: pro, max5, max20, or custom |
+| --plan | string | custom | Plan type: pro, max5, max20, team, or custom |
 | --custom-limit-tokens | int | None | Token limit for custom plan (must be > 0) |
-| --view | string | realtime | View type: realtime, daily, or monthly |
+| --view | string | realtime | View type: realtime, daily, monthly, session, entries, sessions, or burn-rate |
+| --output | string | rich | Output format: rich, json, text, or csv |
+| --once | flag | False | Measure once, print a snapshot, and exit |
+| --compact | flag | False | Single-line compact output for status bars |
+| --write-state | flag | False | Write the snapshot to a state file for external tools |
+| --state-file | path | None | State file path for --write-state |
+| --statusline | flag | False | Run as a Claude Code statusline hook and capture official rate_limits |
+| --api | flag | False | Enable the opt-in experimental Anthropic OAuth usage API |
+| --data-paths | list | [] | Claude data directories to scan; repeat or comma-separate values |
+| --warehouse | flag | False | Persist usage entries to the opt-in local warehouse |
+| --warehouse-file | path | None | Usage warehouse file path |
+| --warehouse-retention-days | int | 365 | Days of warehouse records to retain |
 | --timezone | string | auto | Timezone (auto-detected). Examples: UTC, America/New_York, Europe/London |
 | --time-format | string | auto | Time format: 12h, 24h, or auto |
 | --theme | string | auto | Display theme: light, dark, classic, or auto |
 | --refresh-rate | int | 10 | Data refresh rate in seconds (1-60) |
 | --refresh-per-second | float | 0.75 | Display refresh rate in Hz (0.1-20.0) |
 | --reset-hour | int | None | Daily reset hour (0-23) |
+| --date-format | string | None | Date format for daily/monthly table periods |
+| --abbreviate-tokens | flag | False | Abbreviate token counts in table views |
+| --sparklines | flag | False | Show opt-in sparklines in table views |
+| --filter-models | string | all | Use all models, or anthropic to exclude routed non-Claude models |
+| --set-terminal-title | flag | False | Set the terminal title from the usage snapshot |
+| --title-format | string | "{pct}% {plan}" | Terminal title template using pct, plan, used, limit, cost, reset |
+| --hide-model-distribution | flag | False | Hide the model distribution bar |
+| --no-header | flag | False | Hide the header banner |
+| --no-emoji | flag | False | Render plain output without emoji |
 | --log-level | string | INFO | Logging level: DEBUG, INFO, WARNING, ERROR, CRITICAL |
 | --log-file | path | None | Log file path |
 | --debug | flag | False | Enable debug logging |
@@ -210,6 +224,7 @@ claude-monitor --help
 | pro | 19,000 | $18.00           | Claude Pro subscription |
 | max5 | 88,000 | $35.00           | Claude Max5 subscription |
 | max20 | 220,000 | $140.00          | Claude Max20 subscription |
+| team | estimate | unverified       | Team label; prefer official statusline or --plan custom |
 | custom | P90-based | (default) $50.00 | Auto-detection with ML analysis |
 
 #### Command Aliases
@@ -227,6 +242,7 @@ The monitor automatically saves your preferences to avoid re-specifying them on 
 
 **What Gets Saved:**
 - View type (--view)
+- Plan (--plan)
 - Theme preferences (--theme)
 - Timezone settings (--timezone)
 - Time format (--time-format)
@@ -278,6 +294,42 @@ ccm                  # Shortest alias
 
 #### Development mode
 If running from source, use python -m claude_monitor from the src/ directory.
+
+### Machine-readable Usage Protocol
+
+Use these surfaces when another tool needs current usage without scraping the Rich TUI:
+
+```bash
+# One-shot JSON snapshot with source/confidence/provenance fields
+claude-monitor --once --output json
+
+# Compact one-line status output
+claude-monitor --once --compact
+
+# Keep an atomically-written state file up to date for status bars and dashboards
+claude-monitor --write-state --state-file ~/.claude-monitor/state/latest.json
+
+# Install as a Claude Code statusline hook to capture official rate_limits
+claude-monitor --statusline
+```
+
+`--once` exits with automation-friendly codes: `0` ok, `10` near limit, `11` limit hit, `20` indeterminate/no active session, and `30` no data or config error. When official statusline data is fresh it wins; otherwise the snapshot falls back to a labeled local estimate.
+
+### Persistent Usage Warehouse
+
+The warehouse is opt-in and local-only. It stores versioned records by source, account, project, model, and day so history can outlive Claude's 30-day cleanup.
+
+```bash
+# Start persisting usage locally
+claude-monitor --warehouse
+
+# Export warehouse-backed entries as JSON
+claude-monitor --warehouse --view entries --output json
+
+# Export session percentiles and burn-rate reports as CSV
+claude-monitor --warehouse --view sessions --output csv
+claude-monitor --warehouse --view burn-rate --output csv
+```
 
 ### Configuration Options
 
@@ -390,40 +442,40 @@ claude-monitor --log-level WARNING  # DEBUG, INFO, WARNING, ERROR, CRITICAL
 - **Limit Detection**: Intelligent threshold detection with 95% confidence
 
 
-## 🚀 What's New in v3.0.0
+## 🚀 What's New in v4.0.0
 
 ### Major Changes
 
-#### **Complete Architecture Rewrite**
-- Modular design with Single Responsibility Principle (SRP) compliance
-- Pydantic-based configuration with type safety and validation
-- Advanced error handling with optional Sentry integration
-- Comprehensive test suite with 100+ test cases
+#### **Usage Ops Companion**
+- Official Claude Code statusline `rate_limits` are treated as the live source of truth when fresh.
+- Every non-official number is labeled by provenance and confidence instead of being rendered as truth.
+- Machine consumers get one stable snapshot contract through `--once`, `--compact`, and `--write-state`.
+- Opt-in warehouse reports expose durable history, percentiles, burn-rate rows, and estimate-labeled plan recommendations.
 
 #### **Enhanced Functionality**
-- **P90 Analysis**: Machine learning-based limit detection using 90th percentile calculations
-- **Updated Plan Limits**: Pro (44k), Max5 (88k), Max20 (220k) tokens
-- **Cost Analytics**: Model-specific pricing with cache token calculations
-- **Rich UI**: WCAG-compliant themes with automatic terminal background detection
+- **Pace and Forecast**: Reset-aware pace labels, date-context forecasts, and limit-hit freeze behavior.
+- **Official Weekly**: Seven-day percentages render only from official statusline data.
+- **Multi-source Paths**: Multiple Claude data directories are deduplicated and source/account tagged.
+- **Cost Analytics**: Current Anthropic pricing, cache token support, and unknown pricing for non-Anthropic routed models.
 
 #### **New CLI Options**
-- --refresh-per-second: Configurable display refresh rate (0.1-20 Hz)
-- --time-format: Automatic 12h/24h format detection
-- --custom-limit-tokens: Explicit token limits for custom plans
-- --log-file and --log-level: Advanced logging capabilities
-- --clear: Reset saved configuration
-- Command aliases: claude-code-monitor, cmonitor, ccmonitor, ccm for convenience
+- `--statusline`: Capture official Claude Code `rate_limits`.
+- `--once`, `--compact`, `--output json|text|csv`: Script-friendly snapshot/report output.
+- `--write-state`, `--state-file`: Atomic state files for companion tools.
+- `--warehouse`, `--warehouse-file`, `--warehouse-retention-days`: Durable local usage history.
+- `--data-paths`: Scan multiple Claude data directories without collapsing them.
+- `--filter-models anthropic`: Exclude routed non-Claude models from Claude limit math.
+- `--set-terminal-title`, `--title-format`: Snapshot-based terminal title updates.
+- `--no-header`, `--no-emoji`, `--hide-model-distribution`: Glanceable display controls.
 
 #### **Breaking Changes**
-- Package name changed from claude-usage-monitor to claude-monitor
-- Default plan changed from pro to custom (with auto-detection)
-- Minimum Python version increased to 3.9+
-- Command structure updated (see examples above)
+- v4 formalizes the snapshot schema and trust-layer semantics for companion tools.
+- Package name remains `claude-monitor`; Python 3.9+ is still required.
 
 
 ## ✨ Features & How It Works
 
-### v3.0.0 Architecture Overview
+### v4.0.0 Architecture Overview
 
 The new version features a complete rewrite with modular architecture following Single Responsibility Principle (SRP):
 
@@ -530,13 +582,14 @@ The monitor calculates burn rate using sophisticated analysis:
 
 ### Token Limits by Plan
 
-#### v3.0.0 Updated Plan Limits
+#### v4.0.0 Plan Limits and Labels
 
 | Plan | Limit (Tokens) | Cost Limit       | Messages | Algorithm |
 |------|----------------|------------------|----------|-----------|
-| **Claude Pro** | 19,000         | $18.00           | 250 | Fixed limit |
+| **Claude Pro** | 19,000         | $18.00           | 250 | Fixed local estimate |
 | **Claude Max5** | 88,000         | $35.00           | 1,000 | Fixed limit |
 | **Claude Max20** | 220,000        | $140.00          | 2,000 | Fixed limit |
+| **Claude Team** | estimate      | unverified       | unknown | Label only; use statusline or custom |
 | **Custom** | P90-based      | (default) $50.00 | 250+ | Machine learning |
 
 #### Advanced Limit Detection
@@ -548,7 +601,7 @@ The monitor calculates burn rate using sophisticated analysis:
 
 ### Technical Requirements
 
-#### Dependencies (v3.0.0)
+#### Dependencies (v4.0.0)
 
 ```toml
 # Core dependencies (automatically installed)
@@ -557,10 +610,11 @@ rich>=13.7.0                # Rich terminal UI
 pydantic>=2.0.0             # Type validation
 pydantic-settings>=2.0.0    # Configuration management
 numpy>=1.21.0               # Statistical calculations
-sentry-sdk>=1.40.0          # Error reporting (optional)
 pyyaml>=6.0                 # Configuration files
+tomli>=1.2.0                # pyproject fallback on Python <3.11
 tzdata                      # Windows timezone data
 tzlocal>=5.0                # Windows local timezone to IANA resolver
+wcwidth>=0.2.13             # Terminal display-width calculation
 ```
 
 #### Python Requirements
@@ -872,11 +926,11 @@ python -m claude_monitor
 ```
 
 
-### v3.0.0 Testing Features
+### v4.0.0 Testing Features
 
 The new version includes a comprehensive test suite:
 
-- **100+ test cases** with full coverage
+- **700+ non-integration tests** across the snapshot, trust-layer, warehouse, UI, and timezone paths
 - **Unit tests** for all components
 - **Integration tests** for end-to-end workflows
 - **Performance tests** with benchmarking
