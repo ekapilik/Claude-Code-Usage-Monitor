@@ -57,6 +57,17 @@ def _family_of(model: str) -> str:
     return "other"
 
 
+def _block_total_tokens(block: dict) -> int:
+    """Cache-inclusive token total for a block (input + output + both cache kinds)."""
+    tc = block.get("tokenCounts") or {}
+    return (
+        tc.get("inputTokens", 0)
+        + tc.get("outputTokens", 0)
+        + tc.get("cacheCreationInputTokens", 0)
+        + tc.get("cacheReadInputTokens", 0)
+    )
+
+
 def _epoch(iso: Optional[str]) -> Optional[int]:
     if not iso:
         return None
@@ -236,7 +247,9 @@ def build_snapshot(
         }
 
     real_blocks = [b for b in blocks if not b.get("isGap")]
-    hist_tokens = sum(b.get("totalTokens", 0) for b in real_blocks)
+    # Cache-inclusive total so local_history agrees with local.tokens.total_tokens
+    # (block["totalTokens"] is the input+output display-utilization value only).
+    hist_tokens = sum(_block_total_tokens(b) for b in real_blocks)
     hist_cost = round(sum(b.get("costUSD", 0.0) or 0.0 for b in real_blocks), 4)
 
     # seven_day is the OFFICIAL weekly slot, deferred until the statusline keystone

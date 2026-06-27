@@ -153,18 +153,29 @@ class TestFunctions:
         with patch.object(cli_main.sys, "version_info", (3, 9, 0)):
             assert cli_main.validate_cli_environment() is None
 
-    @patch("claude_monitor.cli.main._run_monitoring")
-    @patch("claude_monitor.core.settings.Settings.load_with_last_used")
-    @patch(
-        "claude_monitor.cli.main.validate_cli_environment",
-        return_value="Python 3.9+ required, found 3.7",
-    )
-    def test_main_aborts_on_environment_error(
-        self, mock_validate: Mock, mock_load: Mock, mock_run: Mock
-    ) -> None:
-        """main() checks the environment first and aborts before doing any work (#172)."""
-        with patch("sys.stderr"):
-            result = main([])
+    def test_main_aborts_on_environment_error(self) -> None:
+        """main() checks the environment first and aborts before doing any work (#172).
+
+        Patches via the imported module object rather than the dotted string, because
+        ``claude_monitor.cli.main`` is shadowed by the ``main`` function and the string
+        form resolves to the function (not the module) on Python 3.9/3.10's mock.
+        """
+        import importlib
+
+        cli_main = importlib.import_module("claude_monitor.cli.main")
+        with (
+            patch.object(
+                cli_main,
+                "validate_cli_environment",
+                return_value="Python 3.9+ required, found 3.7",
+            ) as mock_validate,
+            patch(
+                "claude_monitor.core.settings.Settings.load_with_last_used"
+            ) as mock_load,
+            patch.object(cli_main, "_run_monitoring") as mock_run,
+            patch("sys.stderr"),
+        ):
+            result = cli_main.main([])
 
         mock_validate.assert_called_once()
         assert result == 1
@@ -249,9 +260,10 @@ class TestFunctions:
         out = capsys.readouterr().out
         assert rc == 0
         assert "Opus 4.8" in out and "5h 73%" in out
-        assert json.loads(state.read_text())["rate_limits"]["five_hour"][
-            "used_percentage"
-        ] == 73.0
+        assert (
+            json.loads(state.read_text())["rate_limits"]["five_hour"]["used_percentage"]
+            == 73.0
+        )
 
     def test_statusline_survives_garbage_stdin(self, capsys) -> None:
         """A non-JSON stdin must not crash the hook (it runs on every refresh)."""

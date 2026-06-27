@@ -10,7 +10,9 @@ def _args(plan: str = "pro") -> argparse.Namespace:
     return argparse.Namespace(plan=plan)
 
 
-def _data(used: int = 12000, active: bool = True, limit_msg: Optional[list] = None) -> dict:
+def _data(
+    used: int = 12000, active: bool = True, limit_msg: Optional[list] = None
+) -> dict:
     block = {
         "isActive": active,
         "isGap": False,
@@ -47,7 +49,9 @@ def _official(five_pct=42.5, five_reset=1782579600, seven=None, stale=False) -> 
 
 
 def test_official_five_hour_overrides_local() -> None:
-    snap = build_snapshot(_data(used=12000), _args(), token_limit=19000, official=_official())
+    snap = build_snapshot(
+        _data(used=12000), _args(), token_limit=19000, official=_official()
+    )
     five = snap["limits"]["five_hour"]
     assert five["confidence"] == "official"
     assert five["source"]["kind"] == "statusline"
@@ -60,16 +64,21 @@ def test_official_five_hour_overrides_local() -> None:
 
 def test_official_drives_status_code_not_local() -> None:
     # Local would be ~63% (ok); official says 97% -> near_limit (code 10).
-    snap = build_snapshot(_data(used=12000), _args(), token_limit=19000,
-                          official=_official(five_pct=97.0))
+    snap = build_snapshot(
+        _data(used=12000), _args(), token_limit=19000, official=_official(five_pct=97.0)
+    )
     assert snap["status"]["code"] == 10
     assert snap["status"]["label"] == "near_limit"
 
 
 def test_stale_official_falls_back_to_local_not_official_truth() -> None:
     """A stale capture must NOT drive status/confidence as current truth (invariant 4)."""
-    snap = build_snapshot(_data(used=12000), _args(), token_limit=19000,
-                          official=_official(five_pct=96.0, stale=True))
+    snap = build_snapshot(
+        _data(used=12000),
+        _args(),
+        token_limit=19000,
+        official=_official(five_pct=96.0, stale=True),
+    )
     five = snap["limits"]["five_hour"]
     # Falls back to the local estimate; still flagged stale for transparency.
     assert five["confidence"] == "local_estimate"
@@ -81,8 +90,12 @@ def test_stale_official_falls_back_to_local_not_official_truth() -> None:
 
 def test_official_drives_status_without_local_active_block() -> None:
     """Official 98% must drive the exit status even with no local active block (#contract)."""
-    snap = build_snapshot(_data(active=False), _args(), token_limit=19000,
-                          official=_official(five_pct=98.0))
+    snap = build_snapshot(
+        _data(active=False),
+        _args(),
+        token_limit=19000,
+        official=_official(five_pct=98.0),
+    )
     assert snap["limits"]["five_hour"]["confidence"] == "official"
     assert snap["status"]["code"] == 10
     assert snap["status"]["label"] == "near_limit"
@@ -90,8 +103,12 @@ def test_official_drives_status_without_local_active_block() -> None:
 
 def test_leaked_official_percentage_falls_back_to_local() -> None:
     # used_percentage unavailable (dropped by the reader) -> keep local estimate.
-    snap = build_snapshot(_data(used=12000), _args(), token_limit=19000,
-                          official=_official(five_pct=None, five_reset=1751046000))
+    snap = build_snapshot(
+        _data(used=12000),
+        _args(),
+        token_limit=19000,
+        official=_official(five_pct=None, five_reset=1751046000),
+    )
     five = snap["limits"]["five_hour"]
     assert five["confidence"] == "local_estimate"
     assert five["used_percentage"] == round(100 * 12000 / 19000, 1)
@@ -99,8 +116,12 @@ def test_leaked_official_percentage_falls_back_to_local() -> None:
 
 def test_official_seven_day_filled() -> None:
     snap = build_snapshot(
-        _data(), _args(), token_limit=19000,
-        official=_official(seven={"used_percentage": 18.0, "resets_at_epoch": 1751500000}),
+        _data(),
+        _args(),
+        token_limit=19000,
+        official=_official(
+            seven={"used_percentage": 18.0, "resets_at_epoch": 1751500000}
+        ),
     )
     seven = snap["limits"]["seven_day"]
     assert seven["confidence"] == "official"
@@ -111,7 +132,9 @@ def test_official_seven_day_filled() -> None:
 def test_official_seven_day_exhaustion_drives_status() -> None:
     """Weekly exhaustion limits usage too: official seven_day>=100 -> limit_hit."""
     snap = build_snapshot(
-        _data(used=1000), _args(), token_limit=19000,
+        _data(used=1000),
+        _args(),
+        token_limit=19000,
         official=_official(
             five_pct=10.0,
             seven={"used_percentage": 100.0, "resets_at_epoch": 1782579600},
@@ -134,6 +157,28 @@ def test_local_reset_prefers_limit_message_over_block_end() -> None:
 def test_local_reset_falls_back_to_block_end_without_limit() -> None:
     snap = build_snapshot(_data(used=1000), _args(), token_limit=19000)
     assert snap["limits"]["five_hour"]["resets_at"] == "2026-06-27T17:00:00+00:00"
+
+
+def test_local_history_total_is_cache_inclusive() -> None:
+    """local_history.total_tokens must include cache tokens (matches local.tokens)."""
+    data = {
+        "blocks": [
+            {
+                "isActive": False,
+                "isGap": False,
+                "tokenCounts": {
+                    "inputTokens": 1000,
+                    "outputTokens": 500,
+                    "cacheCreationInputTokens": 4000,
+                    "cacheReadInputTokens": 8000,
+                },
+                "totalTokens": 1500,  # input+output only (display utilization)
+                "costUSD": 2.0,
+            }
+        ]
+    }
+    snap = build_snapshot(data, _args(), token_limit=19000)
+    assert snap["local_history"]["total_tokens"] == 13500  # 1000+500+4000+8000
 
 
 def test_no_official_keeps_local_behaviour() -> None:
