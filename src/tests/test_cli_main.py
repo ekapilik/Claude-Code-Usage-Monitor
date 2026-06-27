@@ -218,6 +218,52 @@ class TestFunctions:
 
             assert projects.resolve() in paths
 
+    def test_statusline_captures_rate_limits_and_prints_line(
+        self, tmp_path: Path, capsys
+    ) -> None:
+        """`--statusline` stashes official rate_limits and prints the status bar."""
+        import importlib
+        import io
+        import json
+
+        cli_main = importlib.import_module("claude_monitor.cli.main")
+        official = importlib.import_module("claude_monitor.output.official")
+        state = tmp_path / "statusline" / "latest.json"
+        stdin = io.StringIO(
+            json.dumps(
+                {
+                    "model": {"display_name": "Opus 4.8"},
+                    "rate_limits": {
+                        "five_hour": {"used_percentage": 73.0, "resets_at": 5000}
+                    },
+                }
+            )
+        )
+
+        with (
+            patch.object(official, "default_statusline_path", return_value=state),
+            patch.object(cli_main.sys, "stdin", stdin),
+        ):
+            rc = cli_main.main(["--statusline"])
+
+        out = capsys.readouterr().out
+        assert rc == 0
+        assert "Opus 4.8" in out and "5h 73%" in out
+        assert json.loads(state.read_text())["rate_limits"]["five_hour"][
+            "used_percentage"
+        ] == 73.0
+
+    def test_statusline_survives_garbage_stdin(self, capsys) -> None:
+        """A non-JSON stdin must not crash the hook (it runs on every refresh)."""
+        import importlib
+        import io
+
+        cli_main = importlib.import_module("claude_monitor.cli.main")
+        with patch.object(cli_main.sys, "stdin", io.StringIO("not json at all")):
+            rc = cli_main.main(["--statusline"])
+        assert rc == 0
+        assert capsys.readouterr().out.strip() == "claude-monitor"
+
     def test_effective_token_limit_honors_explicit_custom(self) -> None:
         """An explicit --custom-limit-tokens wins over a P90/computed base (#65)."""
         import argparse

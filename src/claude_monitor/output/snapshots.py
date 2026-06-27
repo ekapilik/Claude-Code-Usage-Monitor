@@ -1,11 +1,11 @@
 """One-shot usage snapshot builder — the single machine-readable contract (#126).
 
-Builds a versioned, source-labeled snapshot from the local JSONL analysis. Every
-number is a LOCAL estimate (``confidence="local_estimate"``); official account
-limits (statusline ``rate_limits``) are not wired yet, so the ``limits`` block is
-shaped exactly like the official ``rate_limits.{five_hour,seven_day}`` and can
-later have its source flipped to ``statusline``/``official`` without breaking
-consumers. No I/O and no network — the same builder ``--write-state`` (#184) reuses.
+Builds a versioned, source-labeled snapshot from the local JSONL analysis. Local
+numbers are estimates (``confidence="local_estimate"``). When the caller passes
+official statusline ``rate_limits`` (see ``official.py``), the ``limits`` block —
+shaped exactly like ``rate_limits.{five_hour,seven_day}`` — flips to
+``confidence="official"`` for that window and the five-hour value drives the exit
+status. No I/O and no network — the same builder ``--write-state`` (#184) reuses.
 """
 
 from __future__ import annotations
@@ -19,8 +19,31 @@ from claude_monitor.core.plans import Plans
 SNAPSHOT_SCHEMA_VERSION = "1.0"
 
 _KIND = "claude_code_jsonl"
+_STATUSLINE = "statusline"
 _LOCAL = "local_estimate"
+_OFFICIAL = "official"
 _UNKNOWN = "unknown"
+
+
+def _official_block(window: Dict[str, Any]) -> Dict[str, Any]:
+    """A ``limits.*`` block sourced from the official statusline ``rate_limits``.
+
+    Official data reports a ``used_percentage`` and ``resets_at`` only — token
+    counts stay ``None`` here (local token detail lives in the ``local`` section).
+    """
+    epoch = window.get("resets_at_epoch")
+    resets_at = (
+        datetime.fromtimestamp(epoch, timezone.utc).isoformat() if epoch else None
+    )
+    return {
+        "used_percentage": window.get("used_percentage"),
+        "tokens_used": None,
+        "token_limit": None,
+        "resets_at": resets_at,
+        "resets_at_epoch": epoch,
+        "source": {"kind": _STATUSLINE},
+        "confidence": _OFFICIAL,
+    }
 
 
 def _family_of(model: str) -> str:
@@ -85,13 +108,23 @@ def _model_distribution(per_model: Optional[dict]) -> List[Dict[str, Any]]:
     return out
 
 
-def build_snapshot(data: Optional[dict], args: Any, token_limit: int) -> dict:
+def build_snapshot(
+    data: Optional[dict],
+    args: Any,
+    token_limit: int,
+    official: Optional[dict] = None,
+) -> dict:
     """Build the one-shot snapshot dict from a single analysis payload.
 
     Args:
         data: the inner monitoring payload (has a ``blocks`` list of 5h blocks).
         args: parsed CLI namespace (uses ``plan``, optional ``data_path``).
         token_limit: the active token limit (plan or P90) for utilization.
+        official: optional official statusline limits (from
+            ``read_official_limits``). When a window carries a real
+            ``used_percentage`` it overrides the local estimate for that window
+            and becomes ``confidence="official"``; the five-hour value also
+            drives the exit-code status.
 
     Returns:
         The versioned snapshot dict (see module docstring).
@@ -202,7 +235,41 @@ def build_snapshot(data: Optional[dict], args: Any, token_limit: int) -> dict:
     hist_tokens = sum(b.get("totalTokens", 0) for b in real_blocks)
     hist_cost = round(sum(b.get("costUSD", 0.0) or 0.0 for b in real_blocks), 4)
 
-    code, label = _status(active, raw_pct)
+    # seven_day is the OFFICIAL weekly slot, deferred until the statusline keystone
+    # fills it. It is NOT the local window sum (that lives in local_history, and the
+    # analysis window is ~8 days, not 7).
+    seven_day = {
+        "used_percentage": None,
+        "tokens_used": None,
+        "token_limit": None,
+        "resets_at": None,
+        "resets_at_epoch": None,
+        "source": {"kind": _KIND},
+        "confidence": _UNKNOWN,
+    }
+
+    # Trust keystone: when the official statusline reports a real used_percentage,
+    # it is the truth about the live limit — override the local estimate for that
+    # window and let the five-hour value drive the exit-code status.
+    headline_confidence = _LOCAL
+    snapshot_stale = False
+    status_pct = raw_pct
+    if official:
+        snapshot_stale = bool(official.get("stale"))
+        off_five = official.get("five_hour") or {}
+        if off_five.get("used_percentage") is not None:
+            five_hour = _official_block(off_five)
+            status_pct = off_five["used_percentage"]
+            headline_confidence = _OFFICIAL
+        off_seven = official.get("seven_day") or {}
+        if off_seven.get("used_percentage") is not None:
+            seven_day = _official_block(off_seven)
+            # Weekly exhaustion limits usage too: let the higher of the two
+            # official windows drive the exit status.
+            seven_pct = off_seven["used_percentage"]
+            status_pct = seven_pct if status_pct is None else max(status_pct, seven_pct)
+
+    code, label = _status(active, status_pct)
 
     return {
         "schema_version": SNAPSHOT_SCHEMA_VERSION,
@@ -213,23 +280,12 @@ def build_snapshot(data: Optional[dict], args: Any, token_limit: int) -> dict:
             "account": None,
             "data_paths": [data_path] if data_path else [],
         },
-        "confidence": _LOCAL,
-        "stale": False,
+        "confidence": headline_confidence,
+        "stale": snapshot_stale,
         "plan": plan,
         "limits": {
             "five_hour": five_hour,
-            # seven_day is the OFFICIAL weekly slot, deferred until the statusline
-            # keystone fills it. It is NOT the local window sum (that lives in
-            # local_history, and the analysis window is ~8 days, not 7).
-            "seven_day": {
-                "used_percentage": None,
-                "tokens_used": None,
-                "token_limit": None,
-                "resets_at": None,
-                "resets_at_epoch": None,
-                "source": {"kind": _KIND},
-                "confidence": _UNKNOWN,
-            },
+            "seven_day": seven_day,
         },
         "local": local,
         "local_history": {

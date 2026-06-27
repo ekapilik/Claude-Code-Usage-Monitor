@@ -27,8 +27,15 @@ def format_compact(snapshot: dict) -> str:
 
     pct = five.get("used_percentage")
     pct_s = f"{pct:.1f}%" if pct is not None else "--%"
-    limit = five.get("token_limit")
-    used_s = f"{_abbrev(five.get('tokens_used') or 0)}/{_abbrev(limit) if limit else '?'}"
+
+    # Official limits report a percentage but no token counts; only show the
+    # (used/limit) detail when we actually have a local token count.
+    tokens_used = five.get("tokens_used")
+    if tokens_used is not None:
+        limit = five.get("token_limit")
+        used_s = f" ({_abbrev(tokens_used)}/{_abbrev(limit) if limit else '?'})"
+    else:
+        used_s = ""
 
     bpm = local.get("burn_rate_tokens_per_minute")
     bpm_s = f"{_abbrev(bpm)}/min" if bpm is not None else "--/min"
@@ -37,7 +44,7 @@ def format_compact(snapshot: dict) -> str:
     reset_s = resets_at[11:16] if resets_at else "--:--"  # HH:MM from ISO
 
     cost = local.get("cost_usd") or 0.0
-    return f"claude {pct_s} ({used_s}) | {bpm_s} | reset {reset_s} | ${cost:.2f}"
+    return f"claude {pct_s}{used_s} | {bpm_s} | reset {reset_s} | ${cost:.2f}"
 
 
 def format_text(snapshot: dict) -> str:

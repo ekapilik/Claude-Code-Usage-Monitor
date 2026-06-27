@@ -188,6 +188,12 @@ class Settings(BaseSettings):
         description="Measure usage once, print a snapshot, and exit (no live loop)",
     )
 
+    statusline: bool = Field(
+        default=False,
+        description="Run as a Claude Code statusline hook: read session JSON on "
+        "stdin, capture official rate_limits, and print a one-line status",
+    )
+
     compact: bool = Field(
         default=False,
         description="Single-line compact output (works live and one-shot)",

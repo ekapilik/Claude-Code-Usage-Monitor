@@ -138,6 +138,22 @@ def test_once_write_state_writes_file(
     assert json.loads(state.read_text())["schema_version"] == "1.0"
 
 
+def test_once_consumes_official_limits(capsys: pytest.CaptureFixture) -> None:
+    """When official statusline limits exist, the snapshot uses them (trust keystone)."""
+    official = {
+        "five_hour": {"used_percentage": 88.0, "resets_at_epoch": 1782579600},
+        "seven_day": None,
+        "captured_at_epoch": 1782570000,
+        "stale": False,
+    }
+    with patch.object(cli_main, "read_official_limits", return_value=official):
+        _run(_args("json"), _payload())
+    doc = json.loads(capsys.readouterr().out)
+    assert doc["limits"]["five_hour"]["confidence"] == "official"
+    assert doc["limits"]["five_hour"]["used_percentage"] == 88.0
+    assert doc["confidence"] == "official"
+
+
 def test_once_compact_prints_single_line(capsys: pytest.CaptureFixture) -> None:
     """--once --compact prints one glanceable line, not the full TUI or JSON (#65)."""
     args = argparse.Namespace(

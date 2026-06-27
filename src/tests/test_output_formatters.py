@@ -73,3 +73,23 @@ def test_format_compact_handles_missing_fields() -> None:
     assert "\n" not in line
     assert "--%" in line
     assert "reset --:--" in line
+
+
+def test_format_compact_official_omits_token_detail() -> None:
+    """Official limits have no token counts -> no misleading (0/?) parenthetical."""
+    snap = {
+        "limits": {
+            "five_hour": {
+                "used_percentage": 73.5,
+                "tokens_used": None,
+                "token_limit": None,
+                "resets_at": "2026-06-27T17:00:00+00:00",
+                "confidence": "official",
+            }
+        },
+        "local": {"burn_rate_tokens_per_minute": 200.0, "cost_usd": 9.0},
+    }
+    line = format_compact(snap)
+    assert "73.5%" in line
+    assert "(" not in line  # no token parenthetical
+    assert "claude 73.5% |" in line

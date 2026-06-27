@@ -2,6 +2,7 @@
 
 import argparse
 import contextlib
+import json
 import logging
 import os
 import signal
@@ -31,6 +32,11 @@ from claude_monitor.output import (
     format_compact,
     format_json,
     format_text,
+)
+from claude_monitor.output.official import (
+    capture_statusline,
+    format_statusline,
+    read_official_limits,
 )
 from claude_monitor.output.state import default_state_path, write_state_file
 from claude_monitor.terminal.manager import (
@@ -173,7 +179,8 @@ def _run_once(args: argparse.Namespace) -> int:
         args, monitoring_data.get("token_limit") or get_token_limit(args.plan, blocks)
     )
 
-    snapshot = build_snapshot(data, args, token_limit)
+    official = read_official_limits(now_epoch=int(time.time()))
+    snapshot = build_snapshot(data, args, token_limit, official=official)
     output = getattr(args, "output", "rich")
     if output == "json":
         print(format_json(snapshot))
@@ -191,6 +198,38 @@ def _run_once(args: argparse.Namespace) -> int:
     return snapshot["status"]["code"]
 
 
+def _run_statusline() -> int:
+    """Capture official ``rate_limits`` from Claude Code's statusline stdin and
+    print the status bar line (trust keystone producer).
+
+    Wire it up in Claude Code ``settings.json``::
+
+        "statusLine": {"type": "command", "command": "claude-monitor --statusline"}
+
+    Must be fast and never raise — a crash here would blank the user's status bar.
+    """
+    try:
+        raw = sys.stdin.read()
+        payload = json.loads(raw) if raw.strip() else {}
+    except Exception:  # unreadable stdin or non-JSON: degrade, don't crash
+        payload = {}
+    if not isinstance(payload, dict):
+        payload = {}
+
+    capture = None
+    try:
+        capture = capture_statusline(payload, now_epoch=int(time.time()))
+    except Exception as e:  # a write error must not blank the status bar
+        logging.getLogger(__name__).debug(f"statusline capture failed: {e}")
+
+    try:
+        line = format_statusline(payload, capture)
+    except Exception:  # never let a formatting edge case blank the bar
+        line = "claude-monitor"
+    print(line)
+    return 0
+
+
 def main(argv: Optional[List[str]] = None) -> int:
     """Main entry point with direct pydantic-settings integration."""
     if argv is None:
@@ -199,6 +238,11 @@ def main(argv: Optional[List[str]] = None) -> int:
     if "--version" in argv or "-v" in argv:
         print(f"claude-monitor {__version__}")
         return 0
+
+    # The statusline hook runs on every Claude Code refresh (sub-second), so it
+    # short-circuits before the heavy settings/logging/timezone setup.
+    if "--statusline" in argv:
+        return _run_statusline()
 
     once_mode = "--once" in argv
 
@@ -330,7 +374,10 @@ def _run_monitoring(args: argparse.Namespace) -> None:
                     if getattr(args, "compact", False) or getattr(
                         args, "write_state", False
                     ):
-                        snapshot = build_snapshot(data, args, token_limit_now)
+                        official = read_official_limits(now_epoch=int(time.time()))
+                        snapshot = build_snapshot(
+                            data, args, token_limit_now, official=official
+                        )
 
                     if getattr(args, "compact", False):
                         renderable = format_compact(snapshot)
