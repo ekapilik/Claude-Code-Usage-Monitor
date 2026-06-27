@@ -572,6 +572,7 @@ def _run_table_view(
             data_path=str(data_path),
             aggregation_mode=view_mode,
             timezone=args.timezone,
+            reset_hour=getattr(args, "reset_hour", None),
         )
 
         # Create table controller

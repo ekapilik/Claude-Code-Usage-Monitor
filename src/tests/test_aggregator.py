@@ -620,3 +620,39 @@ class TestUsageAggregator:
         assert monthly_result[0]["month"] == "2024-01"
         assert monthly_result[1]["month"] == "2024-02"
         assert monthly_result[2]["month"] == "2024-03"
+
+
+class TestResetHourBucketing:
+    """`--reset-hour` shifts the daily bucket boundary (issues #95, #96, #106)."""
+
+    def _entry(self, ts: datetime) -> UsageEntry:
+        return UsageEntry(
+            timestamp=ts,
+            input_tokens=10,
+            output_tokens=5,
+            cost_usd=0.001,
+            model="claude-3-haiku",
+            message_id=ts.isoformat(),
+            request_id="r",
+        )
+
+    def test_reset_hour_moves_early_entry_to_previous_day(self) -> None:
+        """With reset-hour 4, 02:00 belongs to the prior usage-day; 05:00 to today."""
+        aggregator = UsageAggregator(data_path="/x", reset_hour=4)
+        entries = [
+            self._entry(datetime(2024, 1, 2, 2, 0, tzinfo=timezone.utc)),
+            self._entry(datetime(2024, 1, 2, 5, 0, tzinfo=timezone.utc)),
+        ]
+        result = aggregator.aggregate_daily(entries)
+        days = {row["date"] for row in result}
+        assert days == {"2024-01-01", "2024-01-02"}
+
+    def test_no_reset_hour_keeps_calendar_day(self) -> None:
+        """Without reset-hour the bucket is the plain calendar day (no regression)."""
+        aggregator = UsageAggregator(data_path="/x")
+        entries = [
+            self._entry(datetime(2024, 1, 2, 2, 0, tzinfo=timezone.utc)),
+            self._entry(datetime(2024, 1, 2, 5, 0, tzinfo=timezone.utc)),
+        ]
+        result = aggregator.aggregate_daily(entries)
+        assert [row["date"] for row in result] == ["2024-01-02"]

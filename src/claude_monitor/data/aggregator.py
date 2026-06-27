@@ -7,7 +7,7 @@ by day and month, similar to ccusage's functionality.
 import logging
 from collections import defaultdict
 from dataclasses import dataclass, field
-from datetime import datetime
+from datetime import datetime, timedelta
 from typing import Any, Callable, Dict, List, Optional
 
 from claude_monitor.core.models import SessionBlock, UsageEntry, normalize_model_name
@@ -93,7 +93,11 @@ class UsageAggregator:
     """Aggregates usage data for daily and monthly reports."""
 
     def __init__(
-        self, data_path: str, aggregation_mode: str = "daily", timezone: str = "UTC"
+        self,
+        data_path: str,
+        aggregation_mode: str = "daily",
+        timezone: str = "UTC",
+        reset_hour: Optional[int] = None,
     ):
         """Initialize the aggregator.
 
@@ -101,10 +105,15 @@ class UsageAggregator:
             data_path: Path to the data directory
             aggregation_mode: Mode of aggregation ('daily' or 'monthly')
             timezone: Timezone string for date formatting
+            reset_hour: Hour-of-day (0-23) the usage day rolls over at. When set,
+                a day runs ``reset_hour`` -> ``reset_hour`` instead of midnight to
+                midnight, so e.g. 02:00 with ``reset_hour=4`` counts toward the
+                previous day. Only affects daily aggregation, not the 5h window.
         """
         self.data_path = data_path
         self.aggregation_mode = aggregation_mode
         self.timezone = timezone
+        self.reset_hour = reset_hour
         self.timezone_handler = TimezoneHandler()
 
     def _aggregate_by_period(
@@ -170,9 +179,10 @@ class UsageAggregator:
         Returns:
             List of daily aggregated data
         """
+        shift = timedelta(hours=self.reset_hour or 0)
         return self._aggregate_by_period(
             entries,
-            lambda timestamp: timestamp.strftime("%Y-%m-%d"),
+            lambda timestamp: (timestamp - shift).strftime("%Y-%m-%d"),
             "date",
             start_date,
             end_date,
